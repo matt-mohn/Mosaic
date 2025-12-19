@@ -1,0 +1,564 @@
+---
+title: "Example: Mosaic in Action"
+subtitle: "north carolina (simple + county)"
+author: "Matt Mohn"
+date: "2025-12-16"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::knit_hooks$set(size = function(before, options, envir) {
+  if (before) {
+    return(paste0("\\", options$size))
+  } else {
+    return("\\normalsize")
+  }
+})
+```
+
+```{r, warning=FALSE, message=FALSE}
+## Load necessary packages
+library(sf)
+library(tidyverse)
+library(igraph)
+library(sf)
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(shadowtext)
+library(scales)
+
+
+## Load mosaic files
+source("timing_functions.R")
+source("scoring_functions.R")
+source("tree_functions.R")
+source("partition_functions.R")
+source("recom_functions.R")
+source("graph_functions.R")
+source("output_functions.R")
+source("chain_runner.R")
+source("cleanup_globals.R")
+source("graphics.R")
+
+```
+
+\pagebreak
+
+## Example 1: Simple Annealing
+
+Let's setup and run the chain.
+
+We'll use a generalized North Carolina VTD shapefile (generalization simplifies the shapefile - this doesn't affect the annealing in any way but makes plotting our results faster). It's saved here as `North_Carolina_Simplified.shp`
+
+By default, Mosaic will run for 1000 iterations with a `pdev_tolerance` (acceptable population deviation) of +/-5%, and applies a cut edge weight of 1 (`weight_cut_edges` = 1). It will produce 5 districts by default, but we want North Carolina to have the 14 congressional districts it has in real life, so we set `num_districts` to 14 here.
+
+&nbsp;
+
+```{r ex-1-run, message=FALSE,warning=FALSE, size = "small"}
+SHAPEFILE <- "shapefiles/North_Carolina_Simplified.shp"
+
+results <- run_chain(
+  shapefile_path = SHAPEFILE,
+  num_districts = 14,
+  seed=123456
+)
+
+```
+
+&nbsp;
+
+The results of the annealing are encouraging: the program initialized with 792 cuts (which isn't bad itself) and then fell to 540 over the course of the run. 
+
+The score perfectly matches the number of cuts because that's the only weight that we used.
+
+&nbsp;
+
+```{r ex1-graph-silent, echo=FALSE,message=FALSE,warning=FALSE, fig.height=3}
+
+# Get the results from the last run
+most_recent_metrics <- list.files("output/", pattern = "^metrics.*\\.csv$", 
+                                  full.names = TRUE) |> 
+  {\(x) x[which.max(file.mtime(x))]}()
+
+metrics_data <- read_csv(most_recent_metrics)
+
+ggplot(data=metrics_data)+
+  geom_line(aes(x=iteration,y=cut_edges),
+            linewidth=1,
+            color="#254B81")+
+  ylab("")+
+  labs(title="Cut edges")+
+  theme_minimal()
+
+```
+
+&nbsp;
+
+_Knowing_ the results is only a part of the fun. Let's see what the map actually looks like.
+
+Mosaic includes the `mosaic_plot` file, which can create nice-looking maps on the fly.
+
+&nbsp;
+
+```{r ex-1-map, warning=FALSE, message=FALSE, results="hide", dpi=150}
+
+# By default, mosaic_plot will call from the most recently
+# saved final_assignments file.
+
+p <- mosaic_plot(shapefile_path = SHAPEFILE,
+                 type="simple",
+                 title="North Carolina: Example 1",
+                 subtitle="Congressional districts, no weights",
+                 border_outline = TRUE, 
+                 district_outline = TRUE,
+                 county_outline = TRUE, 
+                 number_labels = TRUE,
+                 precinct_outline = TRUE)
+p
+
+```
+
+&nbsp;
+
+It looks great! All of the districts are fairly compact and there aren't many weird shapes. One issue jumps out though - we're splitting counties all over the place (look at Charlotte or Raleigh!) That makes sense- we didn't tell Mosaic to try in the first place. For that, let's move to example 2.
+
+&nbsp;
+
+\newpage
+
+## Example 2: Preserving Counties
+
+To better preserve counties, we take the same `run_chain()` call from earlier- but make two critical changes.
+
+- First, we apply `county_bias`. The recombination algorithm usually randomly selects connections in the spanning graph to cut. However, we can induce it to draw cuts _between_ counties, instead of _within_ them, by increasing the sampling probability of edges that are also county boundaries. By setting `county_bias` to 10, we make it 10 times as likely that a county boundary is selected compared to a typical connection.
+
+- Second, although `county_bias` will naturally lead to maps with fewer county splits, we also want the algorithm to try and value low-splitting as a general practice. We set `weight_county_splits` to 15. There are no units involved, but by default this means that 1 county split will be worth as much as 15 additional cut edges in annealing.
+
+&nbsp;
+
+```{r ex2, message=FALSE,warning=FALSE, size = "small"}
+SHAPEFILE <- "shapefiles/North_Carolina_Simplified.shp"
+
+results <- run_chain(
+  shapefile_path = SHAPEFILE,
+  num_districts = 14,
+  seed=12345,
+  county_bias=10,
+  weight_county_splits=15,
+)
+
+```
+
+&nbsp;
+
+The initial score (954) reflects the number of cut edges (725) plus 10 times the number of county splits (15.3). After 1000 iterations, the score has fallen to 511, with 475 cut edges and just 2.40 county splits.
+
+&nbsp;
+
+```{r ex2-graph-silent, echo=FALSE,message=FALSE,warning=FALSE, fig.height=3}
+
+# Get the results from the last run
+most_recent_metrics <- list.files("output/", pattern = "^metrics.*\\.csv$", 
+                                  full.names = TRUE) |> 
+  {\(x) x[which.max(file.mtime(x))]}()
+
+metrics_data <- read_csv(most_recent_metrics)
+
+# Calculate scaling factor for secondary axis
+scale_factor <- max(metrics_data$cut_edges, na.rm = TRUE) / 
+                max(metrics_data$county_splits, na.rm = TRUE)
+
+ggplot(data = metrics_data) +
+  geom_line(aes(x = iteration, y = cut_edges, color = "Cut Edges"),
+            linewidth = 1) +
+  geom_line(aes(x = iteration, y = county_splits * scale_factor, color = "County Splits"),
+            linewidth = 1) +
+  scale_color_manual(
+    name = "",
+    values = c("Cut Edges" = "#254B81", "County Splits" = "#6BA3D0")
+  ) +
+  scale_y_continuous(
+    name = "Cut Edges",
+    sec.axis = sec_axis(~ . / scale_factor, name = "County Splits")
+  ) +
+  labs(title = "Cut Edges and County Splits") +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    axis.title.y.left = element_text(color = "#254B81"),
+    axis.text.y.left = element_text(color = "#254B81"),
+    axis.title.y.right = element_text(color = "#6BA3D0"),
+    axis.text.y.right = element_text(color = "#6BA3D0")
+  )
+```
+
+&nbsp;
+
+For due diligence's sake, let's plot the map just to be sure.
+
+&nbsp;
+
+```{r ex2-map, warning=FALSE, message=FALSE, results="hide", dpi=150}
+
+p <- mosaic_plot(shapefile_path = SHAPEFILE,
+                 type="simple",
+                 title="North Carolina: Example 2",
+                 subtitle="Congressional districts with county weights",
+                 border_outline = TRUE, 
+                 district_outline = TRUE,
+                 county_outline = TRUE, 
+                 number_labels = TRUE,
+                 precinct_outline = TRUE)
+p
+
+```
+
+&nbsp;
+
+Looks good! 
+
+There are different ways of measuring county splits. Four counties are split here (Granville, Mecklenburg, Wake, and Wilkes) but because Meck and Wake are larger than a district each, we subtract them from the total, taking us down to 2.
+
+The remaining 0.4 comes from a measure of fragmentation- this penalizes splits that are especially egregious.
+
+Now that we know how to draw goegraphically nice-looking maps, Example 3 will explore using partisan data.
+
+&nbsp;
+
+\newpage
+
+## Example 3: Republican Gerrymander
+
+For Example 3, let's attempt to draw a Republican gerrymander- which, not coincidentally, is what the North Carolina General Assembly has been doing for the past two decades anyway. Learn from the best, right?
+
+Let's use the following settings:
+
+* Decrease `county_bias` to 2. First off, we care less about county splits this time around. Second, when we're looking to pull off partisan objectives, we don't want to constrain the set of possible combinations available to us.
+* Decrease `weight_county_splits` to 5- again, nice to have, but not something mission-critical.
+* Increase `num_steps` to 3000 up from the default 1000, to give us more room to maneuver.
+* Set `target_efficiency_gap` to 0.5, meaning we aim for Republican votes to be 40% more efficient than Democratic ones. We weight this a 100 using `weight_efficiency_gap`.
+* Set `target_mean_median` to 0.15, meaning we want the median district in North Carolina to be 15% more Republican by share of the vote than the state as a whole. If the state votes for a Democrat, we still want a majority to be won by Republicans. We weight this a 50 using `weight_mean_median`.
+* Finally, set `target_dem_seats` to 2. This is pretty self-explanatory! We could aim for 0, but that would be very difficult and we don't want the score to be too meaningless. We weight this even further, to 250, using `weight_dem_seats.`
+
+&nbsp;
+
+```{r ex-3, message=FALSE,warning=FALSE, size = "small"}
+SHAPEFILE <- "shapefiles/North_Carolina_Simplified.shp"
+
+results <- run_chain(
+  shapefile_path = SHAPEFILE,
+  num_districts = 14,
+  seed=123456,
+  county_bias=2,
+  weight_county_splits=5,
+  target_efficiency_gap=0.5,
+  weight_efficiency_gap=100,
+  target_mean_median=0.15,
+  weight_mean_median=50,
+  num_steps=3000,
+  target_dem_seats=2,
+  weight_dem_seats=250
+)
+
+```
+
+&nbsp;
+
+The results are encouraging. `MM DIFF` is R+5.0 (not R+15, our target, but pretty good for 3000 runs), and `EG ADJ` (efficiency gap adjusted over a few different swing scenarios) hit R+25.
+
+The model expects Republicans to win 10.5 seats over the long-run average, with Democrats winning only 3.5 - but the seat table makes it pretty clear that in most years this is a 11-3 map.
+
+Once again, we graph using `mosaic_plot` - this time, however, we can set `type` to 'partisan' and look at the districts' final partisanship. This only works if we ran the annealing using partisan data- otherwise the annealing will not store this information.
+
+&nbsp;
+
+```{r ex3-map, warning=FALSE, message=FALSE, results="hide", dpi=150}
+
+p <- mosaic_plot(shapefile_path = SHAPEFILE,
+                 type="partisan",
+                 title="North Carolina: Example 3",
+                 subtitle="Republican congressional gerrymander",
+                 border_outline = TRUE, 
+                 district_outline = TRUE,
+                 county_outline = TRUE, 
+                 number_labels = TRUE,
+                 precinct_outline = FALSE)
+p
+
+```
+
+&nbsp;
+
+Anyone familiar with North Carolina gerrymandering history will immediately recognize this kind of map.
+
+* The Triad is cracked; Greensboro and Winston-Salem are put into separate districts. District 1 (the Winston-to-TN district) looks like Virginia Foxx's NC-5 from 2001-2021. Greensboro itself is split perfectly in half.
+* Charlotte, Raleigh, Chapel Hill, and Durham are all packed into deep blue districts.
+* The Black Belt is split. Goldsboro, Kinston, and Rocky Mount all end up in three different districts.
+* Two 'claws' form around the Triangle (Districts 5 and 10) instead of a district forming along the VA border.
+* Fayetteville's district reaches south (towards South Carolina). Any other direction would be more purple.
+* The purple-ish suburbs around Charlotte end up in three different districts.
+
+All of these choices (major and minor) contribute to this kind of partisan lean, but the algorithm figured out unknowingly what took Republican mapmakers a while to master.
+
+Let's check out the partisan skew using `mosaic_partisan_plot`
+
+&nbsp;
+
+```{r  ex3-graph, message=FALSE,warning=FALSE, fig.height=3}
+p <- mosaic_partisan_plot(title="Example 3",
+                          subtitle="Republican Gerrymander")
+
+p
+
+```
+
+&nbsp;
+
+Gerrymandering in North Carolina is a bipartisan tradition, however, so for the reverse take, check out Example 4.
+
+\newpage
+
+## Example 4: Democratic Gerrymander
+
+For the Democratic attempt, we will basically reverse the settings from Example 3. The changes are:
+
+* Set `target_efficiency_gap` to -0.5, meaning we aim for __Democratic__ votes to be 50% more efficient than Republican ones.
+* Set `target_mean_median` to -0.1, meaning we want the median district in North Carolina to be 15% __less__ Republican by share of the vote than the state as a whole.
+* Finally, set `target_dem_seats` to 10.
+
+For concision, let's suppress the console output summaries with `verbose_console` = FALSE.
+&nbsp;
+
+```{r ex-4, message=FALSE,warning=FALSE, size = "small"}
+SHAPEFILE <- "shapefiles/North_Carolina_Simplified.shp"
+
+results <- run_chain(
+  shapefile_path = SHAPEFILE,
+  num_districts = 14,
+  seed=123456,
+  county_bias=2,
+  weight_county_splits=5,
+  target_efficiency_gap=-0.3,
+  weight_efficiency_gap=100,
+  target_mean_median=-0.1,
+  weight_mean_median=50,
+  num_steps=3000,
+  target_dem_seats=11,
+  weight_dem_seats=250,
+  verbose_console=FALSE 
+  
+)
+
+```
+
+&nbsp;
+
+The results look great, but in in the opposite direction from earlier. `MM DIFF` is D+8.4, meaning the median district gave Kamala Harris 57.1% of the vote, while the average across the state was just 48.7%.
+
+`EG ADJ` is D+10.7, and the model expects Democrats to win 8.0 seats and Republicans 6.0.
+
+Again, we graph using `mosaic_plot`.
+
+&nbsp;
+
+```{r ex4-map, warning=FALSE, message=FALSE, results="hide", dpi=150}
+
+p <- mosaic_plot(shapefile_path = SHAPEFILE,
+                 type="partisan",
+                 title="North Carolina: Example 4",
+                 subtitle="Democratic congressional gerrymander",
+                 border_outline = TRUE, 
+                 district_outline = TRUE,
+                 county_outline = TRUE, 
+                 number_labels = TRUE,
+                 precinct_outline = FALSE)
+p
+
+```
+
+&nbsp;
+
+Here, many of the opposite decisions from the Republican map have been taken.
+
+* Charlotte is cracked in two- not packed. The resulting districts (12 and 6) both vote solidly blue.
+* Similarly, the Triangle is cracked- not packed- and its blue votes are distributed into 5 different districts.
+* The Piedmont Triad is mostly united in District 10 (with some of Greensboro's excess blue elsewhere). Fayetteville's district aims north to purple Raleigh suburbs, not east.
+
+On the Tennessee border, Mosaic sees a chance at a competitive district, and while it can't draw a blue one, it follows the ghost of Heath Shuler to come up with one (District 4) that Trump only won by 7 points.
+
+&nbsp;
+
+```{r  ex4-graph, echo=FALSE, message=FALSE,warning=FALSE, fig.height=3}
+p <- mosaic_partisan_plot(title="Example 4",
+                          subtitle="Democratic Gerrymander")
+
+p
+
+```
+
+
+\newpage
+
+## Example 5: A Fair State Senate Map
+
+Let's deploy the partisan tools for a good cause- drawing a fair/competitive North Carolina State Senate map.
+
+* Switch `target_mean_median` to 0 and `target_efficiency_gap` to 0. This is the same as favoring neither party.
+* Introduce `weight_competitiveness` to 15. This metric tries to increase the share of districts that are competitive, where a 100% competitive district is defined as having a 50/50 chance of going to either party.
+* Bolster our county tools, like `county_bias` and `weight_county_splits` - since we're after noble causes now.
+
+&nbsp;
+
+
+```{r ex-5, message=FALSE,warning=FALSE, size = "small"}
+SHAPEFILE <- "shapefiles/North_Carolina_Simplified.shp"
+
+results <- run_chain(
+  shapefile_path = SHAPEFILE,
+  num_districts = 50,
+  seed=123456,
+  county_bias=5,
+  weight_county_splits=10,
+  target_mean_median=0,
+  weight_mean_median=150,
+  target_efficiency_gap=0,
+  weight_efficiency_gap=100,
+  weight_competitiveness=5,
+  num_steps=5000,
+  verbose_console = FALSE
+  
+)
+
+```
+
+The results are compelling.
+
+* The mean Democratic vote share (using Kamala Harris' 2024 result) is 48.7%, and the median is 48.9%. Trump wins a majority of districts, but if Harris had won, she likely would have too.
+* The efficiency gap is R+2.1%, well within our tolerance.
+* 9.3 competitive seats are forecast- almost 20% of the total map- creating a wide battleground.
+
+&nbsp;
+
+
+```{r ex5-graph-silent, echo=FALSE,message=FALSE,warning=FALSE, fig.height=3}
+p <- mosaic_partisan_plot(title="Example 5",
+                          subtitle="Fair NC State Senate")
+
+p
+
+```
+
+... and visualize! Note- in reality, this map would not pass the extremely strict splitting laws that North Carolina has in place for the NCGA. But it's fun to imagine.
+
+&nbsp;
+
+```{r ex5-map, warning=FALSE, message=FALSE, results="hide", dpi=150}
+
+p <- mosaic_plot(shapefile_path = SHAPEFILE,
+                 type="partisan",
+                 title="North Carolina: Example 5",
+                 subtitle="Balanced and competitive NC Senate map",
+                 border_outline = TRUE, 
+                 district_outline = TRUE,
+                 county_outline = TRUE, 
+                 number_labels = FALSE,
+                 precinct_outline = FALSE)
+p
+
+```
+
+
+\newpage
+
+## Example 6: Dealing with Incumbents
+
+Let's imagine that tomorrow a court orders that North Carolina draw a new, fair congressional map. _However_, the court orders that the remedial map try and keep incumbents apart.
+
+Mosaic can help here. The program can handle both pro-bunking and anti-bunking lists. Pro-bunking lists aim to keep precincts together (like communities of interest). Anti-bunking lists aim to keep precincts apart (like incumbent homes).
+
+We establish the incumbent list here. These are the precinct IDs (GEOIDs) for each North Carolina congressperson (roughly - we don't really know where they live). The first two values are the weight and the exponent (here, we go with 1000 and 1 respectively).
+
+```{r}
+NC_incumbent_list <- c(
+  1000,              # Weight: heavy penalty for splitting
+  1,                 # Exponent: linear penalty
+  "3707900BEAR", #Davis
+  "37183001-27", #Ross
+  "3714701504A", #Murphy
+  "3713500000H", #Foushee
+  "37011000002", #Foxx
+  "37059000013", #McDowell
+  "37129000W25", #Rouzer
+  "37179000014", #Harris
+  "37125000SSP", #Hudson
+  "37035000013", #Harrigan
+  "370890000FR", #Edwards
+  "37119000011", #Adams
+  "37183001-36", #Knott
+  "3704500KM-N"  #Moore
+)
+```
+
+&nbsp;
+
+We pass the bunking list by adding a call to `create_bunking_lists()` to `run_chain()`. Multiple sub-lists can be added to either `anti_bunking` or `pro_bunking`.
+
+&nbsp;
+
+```{r example-6, echo=FALSE, message=FALSE,warning=FALSE, size = "small"}
+results <- run_chain(
+  shapefile_path = SHAPEFILE,
+  num_districts = 14,
+  seed=123456,
+  county_bias=3,
+  weight_county_splits=15,
+  target_mean_median=0,
+  weight_mean_median=500,
+  target_efficiency_gap = 0,
+  weight_efficiency_gap = 100,
+  num_steps=2500,
+  verbose_console = FALSE,
+  verbose_initialization = FALSE,
+  bunking_lists = create_bunking_lists(
+    anti_bunking  = list(NC_incumbent_list) 
+  )
+)
+```
+
+&nbsp;
+
+Partisanship looks good. No major mean/median skew, and a healthy number of competitive districts.
+
+&nbsp;
+
+```{r ex6-graph-silent, echo=FALSE,message=FALSE,warning=FALSE, fig.height=3}
+p <- mosaic_partisan_plot(title="Example 6",
+                          subtitle="Fair NC Congressional Map")
+
+p
+
+```
+
+&nbsp;
+
+We can also pass bunking lists to `mosaic_plot()` - which makes it easy to visually check out the results.
+
+&nbsp;
+
+```{r ex6-map, warning=FALSE, message=FALSE, results="hide", dpi=150}
+
+p <- mosaic_plot("shapefiles/North_Carolina_Simplified.shp",
+                 bunking_lists = create_bunking_lists(
+                   anti_bunking  = list(NC_incumbent_list)
+                 ),
+                 title = "Example 6: Fair NC Congressional Map Without Double-Bunking",
+                 subtitle = "Yellow diamonds: incumbent locations",
+                 district_outline = TRUE,
+                 number_labels = TRUE,
+                 county_outline = TRUE,
+                 border_outline = TRUE)
+p
+
+```
+
