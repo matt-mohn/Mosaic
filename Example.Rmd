@@ -16,11 +16,6 @@ source("mosaic.R")
 load_mosaic()
 ```
 
-```{r trim_file_name_for_render,include=FALSE}
-setwd("~/R_Workshop/Git/Mosaic")
-```
-
-
 &nbsp;
 
 For testing, we will use the included `North_Carolina_Simplified.shp` shapefile. This is a generalized (simplified) shapefile of North Carolina's VTD election precincts, with the following attribute columns as well as geographic details. The election data is taken from the 2024 presidential election.
