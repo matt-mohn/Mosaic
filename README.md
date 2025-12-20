@@ -3,18 +3,17 @@
 </p>
 
 <p align="center">
-  <em>Redistricting via ReCom + Simulated Annealing</em>
+  <em>Redistricting for R</em>
 </p>
 
 <p align="center">
-  <a href="#installation">Installation</a> •
-  <a href="docs/tutorials/nc-examples.md">Examples</a> •
+  <a href="docs/tutorials/nc-examples.md">Example: North Carolina</a> •
+    <a href="docs/tutorials/gif-examples.md">GIFs</a> •
   <a href="#documentation">Documentation</a> •
-  <a href="#features">Features</a>
 </p>
 
 ---
 
 ## What is Mosaic?
 
-Mosaic is an R-based redistricting toolkit that uses recombination (ReCom) and simulated annealing to explore the space of possible district maps. Whether you're drawing fair maps, stu
+Mosaic is an R-based redistric XXXXXXXXX
