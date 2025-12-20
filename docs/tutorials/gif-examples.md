@@ -119,7 +119,7 @@ type = "partisan"   # Show partisan lean
 
 ### Visual Elements
 
-**`border_outline`** *(default: TRUE)*  
+**`border_outline`** *(default: FALSE)*  
 Draw thick black line around entire state.
 
 ```r
@@ -127,7 +127,7 @@ border_outline = TRUE   # Emphasize state boundary
 border_outline = FALSE  # Cleaner look
 ```
 
-**`district_outline`** *(default: TRUE)*  
+**`district_outline`** *(default: FALSE)*  
 Draw black lines between districts.
 
 ```r
@@ -135,7 +135,7 @@ district_outline = TRUE   # Clear district boundaries
 district_outline = FALSE  # Seamless appearance
 ```
 
-**`county_outline`** *(default: TRUE)*  
+**`county_outline`** *(default: FALSE)*  
 Draw navy lines along county boundaries.
 
 ```r

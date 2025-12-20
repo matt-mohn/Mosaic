@@ -324,8 +324,8 @@ calculate_stable_color_mapping <- function(initial_assignment, current_assignmen
 mosaic_gif <- function(shapefile_path, assignments_csv = NULL, metrics_csv = NULL,
                        output_dir = "output", output_path = NULL,
                        type = "simple", fps = 10,
-                       border_outline = TRUE, district_outline = TRUE,
-                       county_outline = TRUE, precinct_outline = FALSE,
+                       border_outline = FALSE, district_outline = FALSE,
+                       county_outline = FALSE, precinct_outline = FALSE,
                        bunking_lists = NULL,
                        width = 500, height = 500) {
   library(sf)

@@ -61,7 +61,7 @@ load_mosaic <- function() {
   # Load required packages
   cat("\nLoading required packages:\n")
   required_packages <- c("sf", "tidyverse", "igraph", "readr", 
-                         "ggplot2", "dplyr", "shadowtext", "scales")
+                         "ggplot2", "dplyr", "shadowtext", "scales", "magick")
   
   for (pkg in required_packages) {
     suppressPackageStartupMessages(library(pkg, character.only = TRUE))
@@ -105,10 +105,8 @@ check_mosaic_dependencies <- function() {
   cat("CHECKING DEPENDENCIES\n")
   cat("========================================\n")
   
-  required_packages <- c(
-    "sf", "tidyverse", "igraph", "readr", 
-    "ggplot2", "dplyr", "shadowtext", "scales"
-  )
+  required_packages <- c("sf", "tidyverse", "igraph", "readr", 
+                         "ggplot2", "dplyr", "shadowtext", "scales", "magick")
   
   missing <- c()
   for (pkg in required_packages) {
