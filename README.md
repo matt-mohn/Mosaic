@@ -14,7 +14,7 @@ Mosaic is an R-based redistricting toolkit that uses recombination (ReCom) to ra
 
 In addition to basic VTD assignment files, Mosaic also includes the functionality to generate its own plots and gifs using recombination results.
 
-Mosaic is a project of Matt Mohn [(@mattmxhn](https://x.com/mattmxhn) but the recombination algorithm at the heart of Mosaic is derived from the one that was developed and refined by Moon Duchin and the MGGG Redistricting Lab.
+Mosaic is a project of Matt Mohn [(@mattmxhn)](https://x.com/mattmxhn) but the recombination algorithm at the heart of Mosaic is derived from the one that was developed and refined by Moon Duchin and the MGGG Redistricting Lab.
 
 ---
 
@@ -49,12 +49,12 @@ mosaic_plot(
 - **[Installation Guide](docs/INSTALL.md)** - System requirements, dependencies, and setup instructions
 - **[License](docs/LICENSE.md)** - MIT License
 
-### Tutorials
+### Tutorials and Reference
 - **[Mosaic in Action: North Carolina Examples](docs/tutorials/nc-examples.md)** - Seven comprehensive examples demonstrating Mosaic's capabilities
-- **[Creating Animated GIFs](docs/tutorials/gif-examples.md)** - Guide to creating GIF animations showing district evolution over time
+- **[Plot Guide](docs/tutorials/plotting_guide.md)**  - Guide and reference for `mosaic_plot()`, `mosaic_partisan_plot()`
+- **[GIF Guide](docs/tutorials/gif-examples.md)** - Guide and reference for `mosaic_gif()`.
 
-### Reference Guides
-- **[Plot Guide](docs/guides/plotting.md)** *(Coming Soon)* - Complete reference for `mosaic_plot()`, `mosaic_gif()`, and `mosaic_partisan_plot()`
+###
 - **[Scoring & Optimization](docs/guides/scoring.md)** *(Coming Soon)* - Deep dive into `run_chain()` parameters, scoring metrics, and optimization strategies
 - **[How Mosaic Works](docs/guides/algorithm.md)** *(Coming Soon)* - Understanding the ReCom algorithm, spanning trees, and simulated annealing
 
@@ -63,7 +63,7 @@ mosaic_plot(
 ## Example Outputs
 
 ### Static Maps
-![ ](docs/tutorials/assets/nc-examples/ex2-map.png)
+![ ](docs/tutorials/assets/nc-examples/ex-2-map-wbw.png)
 
 ### Partisan Analysis
 ![ ](docs/tutorials/assets/nc-examples/ex3-partisan.png)
