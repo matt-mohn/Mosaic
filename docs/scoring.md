@@ -372,6 +372,8 @@ Sum across all districts:
 efficiency_gap = (total_dem_wasted - total_rep_wasted) / total_votes
 ```
 
+For computational simplicity, Mosaic uses an approximation that assumes each district casts the same total number of votes. (This will be fixed eventually).
+
 **How it's calculated (robust version, default):**
 
 The basic version of the efficiency gap is over-sensitive to the current political environment. A change in the result of a single seat from 49.9% to 50.1% Republican can be enough to throw the efficiency gap 10 points in their favor, since it alters the balance of wasted votes dramatically.
