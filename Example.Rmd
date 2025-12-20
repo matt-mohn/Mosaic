@@ -11,7 +11,7 @@ Before exploring our examples, we source the Mosaic main .R file, and run `load_
 
 &nbsp;
 
-```{r setup}
+```{r setup, results="hide"}
 source("mosaic.R")
 load_mosaic()
 ```
