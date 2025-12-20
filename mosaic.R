@@ -29,7 +29,7 @@ initialize_mosaic <- function() {
   .mosaic_env$mosaic_root <- mosaic_path
   
   # Create required directories if they don't exist
-  dirs_to_create <- c("output", "gifs")
+  dirs_to_create <- c("output", "gifs", "cache", "shapefiles", "gifs/temp_frames")
   for (dir in dirs_to_create) {
     full_path <- file.path(mosaic_path, dir)
     if (!dir.exists(full_path)) {
