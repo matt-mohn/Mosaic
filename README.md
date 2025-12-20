@@ -54,8 +54,7 @@ mosaic_plot(
 - **[Plot Guide](docs/tutorials/plotting_guide.md)**  - Guide and reference for `mosaic_plot()`, `mosaic_partisan_plot()`
 - **[GIF Guide](docs/tutorials/gif-examples.md)** - Guide and reference for `mosaic_gif()`.
 - **[Scoring & Optimization](docs/scoring.md)**  - Deep dive into `run_chain()` parameters, scoring metrics, and optimization strategies
-
-- **[How Mosaic Works](docs/guides/algorithm.md)** *(Coming Soon)* - Understanding the ReCom algorithm, spanning trees, and simulated annealing
+- **[How Mosaic Works](docs/tutorials/infoguide.md)** - Understanding the ReCom algorithm, spanning trees, and simulated annealing
 
 ---
 
