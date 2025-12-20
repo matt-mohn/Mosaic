@@ -6,14 +6,77 @@
   <em>Redistricting for R</em>
 </p>
 
-<p align="center">
-  <a href="docs/tutorials/nc-examples.md">Example: North Carolina</a> •
-    <a href="docs/tutorials/gif-examples.md">GIFs</a> •
-  <a href="#documentation">Documentation</a> •
-</p>
-
 ---
 
 ## What is Mosaic?
 
-Mosaic is an R-based redistric XXXXXXXXX
+Mosaic is an R-based redistricting toolkit that uses recombination (ReCom) to randomly generate many series of potential district maps. When paired with simulated annealing, Mosaic can optimize the map to meet users' specifications (like compactness, partisan fairness, and protecting communities of interest). 
+
+In addition to basic VTD assignment files, Mosaic also includes the functionality to generate its own plots and gifs using recombination results.
+
+Mosaic is a project of Matt Mohn [(@mattmxhn](https://x.com/mattmxhn) but the recombination algorithm at the heart of Mosaic is derived from the one that was developed and refined by Moon Duchin and the MGGG Redistricting Lab.
+
+---
+
+## Quick Start
+
+```r
+# Load Mosaic
+source("mosaic.R")
+load_mosaic()
+
+# Run a simple 14-district redistricting
+results <- run_chain(
+  shapefile_path = "shapefiles/North_Carolina_Simplified.shp",
+  num_districts = 14,
+  seed = 123456
+)
+
+# Visualize the result
+mosaic_plot(
+  shapefile_path = "shapefiles/North_Carolina_Simplified.shp",
+  type = "simple",
+  border_outline = TRUE,
+  district_outline = TRUE
+)
+```
+
+---
+
+## Documentation
+
+### Getting Started
+- **[Installation Guide](docs/INSTALL.md)** - System requirements, dependencies, and setup instructions
+- **[License](docs/LICENSE.md)** - MIT License
+
+### Tutorials
+- **[Mosaic in Action: North Carolina Examples](docs/tutorials/nc-examples.md)** - Seven comprehensive examples demonstrating Mosaic's capabilities
+- **[Creating Animated GIFs](docs/tutorials/gif-examples.md)** - Guide to creating GIF animations showing district evolution over time
+
+### Reference Guides
+- **[Plot Guide](docs/guides/plotting.md)** *(Coming Soon)* - Complete reference for `mosaic_plot()`, `mosaic_gif()`, and `mosaic_partisan_plot()`
+- **[Scoring & Optimization](docs/guides/scoring.md)** *(Coming Soon)* - Deep dive into `run_chain()` parameters, scoring metrics, and optimization strategies
+- **[How Mosaic Works](docs/guides/algorithm.md)** *(Coming Soon)* - Understanding the ReCom algorithm, spanning trees, and simulated annealing
+
+---
+
+## Example Outputs
+
+### Static Maps
+![ ](docs/tutorials/assets/nc-examples/ex2-map.png)
+
+### Partisan Analysis
+![ ](docs/tutorials/assets/nc-examples/ex3-partisan.png)
+
+### Animated Evolution
+![ ](docs/tutorials/assets/gif-examples/example2_partisan.gif)
+
+---
+
+## Requirements
+
+- **R** (≥ 4.0)
+- **R Packages**: `sf`, `tidyverse`, `igraph`, `readr`, `ggplot2`, `dplyr`, `shadowtext`, `scales`, `magick`
+- **System**: GDAL, GEOS, PROJ libraries (for spatial operations)
+
+See [Installation Guide](docs/INSTALL.md) for detailed setup instructions.

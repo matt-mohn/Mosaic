@@ -1,4 +1,19 @@
-.Rproj.user
+# Generated output
+output/*.csv
+gifs/*.gif
+gifs/temp_frames/
+
+# Cache files (except NC example)
+cache/*.rds
+!cache/cache_North_Carolina_Simplified.rds
+
+# R temp files
 .Rhistory
 .RData
 .Ruserdata
+*.Rproj
+.Rproj.user/
+
+# OS files
+.DS_Store
+Thumbs.db
