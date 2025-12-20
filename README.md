@@ -14,7 +14,7 @@ Mosaic is an R-based redistricting toolkit that uses recombination (ReCom) to ra
 
 In addition to basic VTD assignment files, Mosaic also includes the functionality to generate its own plots and gifs using recombination results.
 
-Mosaic is a project of Matt Mohn [(@mattmxhn)](https://x.com/mattmxhn) but the recombination algorithm at the heart of Mosaic is derived from the one that was developed and refined by Moon Duchin and the MGGG Redistricting Lab.
+Mosaic is a project of Matt Mohn [(@mattmxhn)](https://x.com/mattmxhn) but the recombination algorithm at the heart of Mosaic is derived from the one that was developed and refined by the MGGG Redistricting Lab.
 
 ---
 
