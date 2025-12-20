@@ -88,7 +88,7 @@ It looks great! All of the districts are fairly compact and there aren't many we
 
 To better preserve counties, we take the same `run_chain()` call from earlier but make two critical changes.
 
-First, we apply `county_bias`. The recombination algorithm usually randomly selects connections in the spanning graph to cut. However, we can induce it to draw cuts *between* counties, instead of *within* them, by increasing the sampling probability of edges that are also county boundaries. By setting `county_bias` to 10, we make it 10 times as likely that a county boundary is selected compared to a typical connection.
+First, we apply `county_bias`. The recombination algorithm generates a random spanning tree to determine where to cut. By setting `county_bias` to 10, we multiply the weight of cross-county edges by 10, making them more expensive for the minimum spanning tree algorithm. This makes the algorithm prefer edges *within* counties, causing cuts to naturally fall *between* counties rather than splitting them.
 
 Second, although `county_bias` will naturally lead to maps with fewer county splits, we also want the algorithm to try and value low-splitting as a general practice. We set `weight_county_splits` to 15. There are no units involved, but by default this means that 1 county split will be worth as much as 15 additional cut edges in annealing.
 
