@@ -2,18 +2,33 @@
 output/*.csv
 gifs/*.gif
 gifs/temp_frames/
+Rplot*.jpeg
 
 # Cache files (except NC example)
 cache/*.rds
 !cache/cache_North_Carolina_Simplified.rds
 
+# Development/sandbox files
+dev/
+*_NOUPLOAD*
+*NOUPLOAD*
+*sandbox*
+
+# RStudio markdown preview byproducts
+*.html
+
 # R temp files
 .Rhistory
 .RData
 .Ruserdata
-*.Rproj
 .Rproj.user/
 
 # OS files
 .DS_Store
 Thumbs.db
+
+# Claude Code (auto-generated tool config)
+.claude/
+
+# Project structure notes (personal reference)
+Mosaic Structure File.md
