@@ -1,4 +1,175 @@
 # ============================================
+# INPUT VALIDATION
+# ============================================
+
+# Normalize column names (handle lowercase variants)
+normalize_column_names <- function(shp) {
+  col_map <- c(
+    "pop" = "POP", "dem" = "DEM", "rep" = "REP", "cty" = "CTY",
+    "geoid" = "GEOID", "geoid20" = "GEOID20", "precinct" = "PRECINCT", "pct" = "PCT"
+  )
+  current_names <- names(shp)
+  lower_names <- tolower(current_names)
+  renamed <- c()
+
+  for (i in seq_along(current_names)) {
+    if (lower_names[i] %in% names(col_map) && current_names[i] != col_map[lower_names[i]]) {
+      renamed <- c(renamed, sprintf("%s -> %s", current_names[i], col_map[lower_names[i]]))
+      names(shp)[i] <- col_map[lower_names[i]]
+    }
+  }
+
+  if (length(renamed) > 0) {
+    cat("\n=== COLUMN NAMES NORMALIZED ===\n")
+    cat(sprintf("  %s\n", renamed))
+    cat("===============================\n\n")
+  }
+
+  return(shp)
+}
+
+validate_shapefile_data <- function(shp, num_districts, use_partisan = FALSE, county_bias = 1.0) {
+  warnings <- c()
+  errors <- c()
+
+  n <- nrow(shp)
+
+  # Check for empty shapefile
+  if (n == 0) {
+    errors <- c(errors, "Shapefile contains 0 precincts")
+  }
+
+  # Check num_districts vs num_precincts
+  if (num_districts > n) {
+    errors <- c(errors, sprintf("num_districts (%d) > num_precincts (%d)", num_districts, n))
+  }
+
+  # Check for duplicate column names
+  col_names <- names(shp)
+  if (any(duplicated(col_names))) {
+    dup_cols <- unique(col_names[duplicated(col_names)])
+    errors <- c(errors, sprintf("Duplicate column names detected: %s", paste(dup_cols, collapse = ", ")))
+  }
+
+  # Check county data if county_bias is being used
+  if (county_bias != 1.0) {
+    if (!"CTY" %in% names(shp)) {
+      warnings <- c(warnings, "county_bias is set but CTY column is missing - county_bias will be ignored")
+    } else {
+      n_counties <- length(unique(shp$CTY))
+      if (n_counties == 1) {
+        warnings <- c(warnings, sprintf("county_bias is set but all precincts are in the same county (%s) - county_bias has no effect", shp$CTY[1]))
+      }
+    }
+  }
+
+  # Check for GEOID column and duplicates
+  geoid_col <- NULL
+  for (col in c("GEOID20", "GEOID", "PRECINCT", "PCT")) {
+    if (col %in% names(shp)) {
+      geoid_col <- col
+      break
+    }
+  }
+  if (!is.null(geoid_col)) {
+    geoids <- shp[[geoid_col]]
+    n_unique <- length(unique(geoids))
+    if (n_unique < n) {
+      warnings <- c(warnings, sprintf("Duplicate %s values detected: %d unique out of %d rows",
+                                       geoid_col, n_unique, n))
+    }
+  }
+
+  # Check POP column
+  if (!"POP" %in% names(shp)) {
+    errors <- c(errors, "Missing required column: POP")
+  } else {
+    pop <- shp$POP
+
+    # Try to parse if character
+    if (is.character(pop)) {
+      parsed <- suppressWarnings(as.numeric(pop))
+      if (all(is.na(parsed))) {
+        errors <- c(errors, "POP column contains unparseable text values")
+      } else if (any(is.na(parsed) & !is.na(pop))) {
+        errors <- c(errors, "POP column contains some unparseable text values")
+      } else {
+        warnings <- c(warnings, "POP column was character type - converted to numeric")
+        shp$POP <- parsed
+        pop <- parsed
+      }
+    }
+
+    # Check for NA values
+    if (all(is.na(pop))) {
+      errors <- c(errors, "POP column is entirely NA")
+    } else if (any(is.na(pop))) {
+      warnings <- c(warnings, sprintf("POP column contains %d NA values", sum(is.na(pop))))
+    }
+
+    # Check for negative values
+    if (!all(is.na(pop)) && any(pop < 0, na.rm = TRUE)) {
+      errors <- c(errors, sprintf("POP column contains %d negative values", sum(pop < 0, na.rm = TRUE)))
+    }
+
+    # Check for all zeros
+    if (!all(is.na(pop)) && all(pop == 0, na.rm = TRUE)) {
+      errors <- c(errors, "POP column is entirely zero")
+    }
+  }
+
+  # Check DEM/REP if partisan optimization is used
+  if (use_partisan) {
+    for (col in c("DEM", "REP")) {
+      if (!col %in% names(shp)) {
+        errors <- c(errors, sprintf("Missing required column for partisan optimization: %s", col))
+      } else {
+        vals <- shp[[col]]
+
+        # Try to parse if character
+        if (is.character(vals)) {
+          parsed <- suppressWarnings(as.numeric(vals))
+          if (all(is.na(parsed))) {
+            errors <- c(errors, sprintf("%s column contains unparseable text values", col))
+          } else if (any(is.na(parsed) & !is.na(vals))) {
+            errors <- c(errors, sprintf("%s column contains some unparseable text values", col))
+          } else {
+            warnings <- c(warnings, sprintf("%s column was character type - converted to numeric", col))
+            shp[[col]] <- parsed
+            vals <- parsed
+          }
+        }
+
+        # Check for all NA
+        if (all(is.na(vals))) {
+          errors <- c(errors, sprintf("%s column is entirely NA", col))
+        }
+      }
+    }
+  }
+
+  # Print warnings
+  if (length(warnings) > 0) {
+    cat("\n=== DATA WARNINGS ===\n")
+    for (w in warnings) {
+      cat(sprintf("  * %s\n", w))
+    }
+    cat("=====================\n\n")
+  }
+
+  # Stop if errors
+  if (length(errors) > 0) {
+    error_msg <- paste(c("\n=== DATA VALIDATION ERRORS ===",
+                         paste("  *", errors),
+                         "===============================\n"),
+                       collapse = "\n")
+    stop(error_msg)
+  }
+
+  return(shp)
+}
+
+# ============================================
 # BUNKING LISTS HELPER FUNCTION
 # ============================================
 
@@ -84,7 +255,17 @@ run_chain <- function(shapefile_path,
   shp <- data$shp
   graph <- data$graph
   cat("Loaded", nrow(shp), "precincts\n")
-  
+
+  # Normalize column names (handle lowercase variants like 'pop' -> 'POP')
+  shp <- normalize_column_names(shp)
+
+  # Determine if partisan optimization is being used
+  use_partisan <- !is.na(weight_mean_median) || !is.na(weight_efficiency_gap) ||
+                  !is.na(weight_dem_seats) || !is.na(weight_competitiveness)
+
+  # Validate input data
+  shp <- validate_shapefile_data(shp, num_districts, use_partisan, county_bias)
+
   # Extract population data
   node_pops <- shp$POP
   total_pop <- sum(node_pops)

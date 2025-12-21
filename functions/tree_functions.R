@@ -1,3 +1,6 @@
+# igraph 2.0+ renamed 'parent' to 'father' in bfs()
+.use_father <- packageVersion("igraph") >= "2.0.0"
+
 random_spanning_tree <- function(graph, counties = NULL, county_bias = 1.0) {
   if (vcount(graph) == 0) {
     stop("Cannot create spanning tree of empty graph")
@@ -33,11 +36,16 @@ random_spanning_tree <- function(graph, counties = NULL, county_bias = 1.0) {
 
 get_tree_structure <- function(graph, root) {
   n <- vcount(graph)
-  
-  bfs_result <- bfs(graph, root = root, unreachable = FALSE, 
-                    parent = TRUE, order = TRUE, rank = FALSE, dist = FALSE)
-  
-  pred <- as.integer(bfs_result$parent)
+
+  if (.use_father) {
+    bfs_result <- bfs(graph, root = root, unreachable = FALSE,
+                      father = TRUE, order = TRUE, rank = FALSE, dist = FALSE)
+    pred <- as.integer(bfs_result$father)
+  } else {
+    bfs_result <- bfs(graph, root = root, unreachable = FALSE,
+                      parent = TRUE, order = TRUE, rank = FALSE, dist = FALSE)
+    pred <- as.integer(bfs_result$parent)
+  }
   order <- as.integer(bfs_result$order)
   
   succ <- vector("list", n)
@@ -57,8 +65,13 @@ get_predecessors <- function(graph, root) {
   if (root < 1 || root > n) {
     stop(sprintf("Invalid root %d for graph with %d vertices", root, n))
   }
-  bfs_result <- bfs(graph, root = root, unreachable = FALSE, parent = TRUE)
-  return(bfs_result$parent)
+  if (.use_father) {
+    bfs_result <- bfs(graph, root = root, unreachable = FALSE, father = TRUE)
+    return(bfs_result$father)
+  } else {
+    bfs_result <- bfs(graph, root = root, unreachable = FALSE, parent = TRUE)
+    return(bfs_result$parent)
+  }
 }
 
 get_successors <- function(graph, root) {

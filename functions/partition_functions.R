@@ -2,17 +2,27 @@
 # PARTITION FUNCTIONS
 # ============================================
 
-create_initial_partition <- function(graph, node_pops, num_districts, pdev_tolerance, seed, 
-                                     counties = NULL, county_bias = 1.0, verbose = TRUE) {
+create_initial_partition <- function(graph, node_pops, num_districts, pdev_tolerance, seed,
+                                     counties = NULL, county_bias = 1.0, verbose = TRUE,
+                                     timeout_seconds = 10) {
   set.seed(seed)
   n <- vcount(graph)
   total_pop <- sum(node_pops)
   ideal_pop <- total_pop / num_districts
-  
+  start_time <- Sys.time()
+
   assignment <- rep(0, n)
   remaining_nodes <- 1:n
-  
+
   for (district in 1:(num_districts - 1)) {
+    # Check timeout
+    elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+    if (elapsed > timeout_seconds) {
+      stop(sprintf(
+        "Mosaic gave up after %.0f seconds - your population deviation tolerance (%.2f%%) may be too tight. See documentation for more info.",
+        timeout_seconds, pdev_tolerance * 100
+      ))
+    }
     if (verbose) cat(sprintf("\nCreating district %d/%d...\n", district, num_districts))
     
     subgraph <- induced_subgraph(graph, remaining_nodes)
@@ -63,9 +73,19 @@ create_initial_partition <- function(graph, node_pops, num_districts, pdev_toler
         break
       }
       
-      if (verbose && attempt %% 1000 == 0) {
-        cat(sprintf("  Attempt %d: subset dev %.1f%%, remaining dev %.1f%%\n", 
-                    attempt, subset_dev * 100, remaining_dev * 100))
+      if (attempt %% 100 == 0) {
+        # Check timeout inside loop
+        elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+        if (elapsed > timeout_seconds) {
+          stop(sprintf(
+            "Mosaic gave up after %.0f seconds - your population deviation tolerance (%.2f%%) may be too tight. See documentation for more info.",
+            timeout_seconds, pdev_tolerance * 100
+          ))
+        }
+        if (verbose && attempt %% 1000 == 0) {
+          cat(sprintf("  Attempt %d: subset dev %.1f%%, remaining dev %.1f%%\n",
+                      attempt, subset_dev * 100, remaining_dev * 100))
+        }
       }
     }
     

@@ -35,6 +35,12 @@ load_or_build_graph <- function(shapefile_path) {
   
   cat("Building graph (not in cache)...\n")
   shp <- st_read(shapefile_path, quiet = TRUE)
+
+  # Check for empty shapefile
+  if (nrow(shp) == 0) {
+    stop("Shapefile contains 0 precincts")
+  }
+
   graph <- build_graph(shp)
   
   cat("Saving to cache:", cache_file, "\n")
