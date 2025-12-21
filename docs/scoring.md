@@ -1,7 +1,7 @@
 
 # Scoring & Optimization Guide
 
-This guide covers everything you need to know about `run_chain()` parameters, scoring metrics, and optimization strategies. It's a deep dive into how Mosaic evaluates and improves district maps.
+This guide covers everything you need to know about `run_chain()` parameters, scoring metrics, and optimization strategies. It should be a full explanation of how Mosaic evaluates and improves district maps.
 
 ## Table of Contents
 
