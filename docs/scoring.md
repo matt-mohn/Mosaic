@@ -1,6 +1,8 @@
 
 # Scoring & Optimization Guide
 
+![ ](../assets/icon_gear.png)
+
 This guide covers everything you need to know about `run_chain()` parameters, scoring metrics, and optimization strategies. It should be a full explanation of how Mosaic evaluates and improves district maps.
 
 ## Table of Contents
@@ -209,6 +211,8 @@ With `weight_cut_edges = 1` and `exponent_cut_edges = 1`, a map with 540 cut edg
 
 ### County Splits
 
+![ ](../assets/icon_split.png)
+
 **What it measures:** How many counties are unnecessarily split across districts.
 
 **Why it matters:** Many states have legal requirements to keep counties whole when possible. Even without legal requirements, splitting fewer counties often creates more recognizable, administratively simpler districts.
@@ -269,6 +273,8 @@ results <- run_chain(
 ---
 
 ### Mean-Median Difference
+
+![ ](../assets/icon_edge.png)
 
 **What it measures:** The difference between the mean Democratic vote share across all districts and the median Democratic vote share. A measure of partisan symmetry.
 
@@ -342,6 +348,8 @@ results <- run_chain(
 ---
 
 ### Efficiency Gap
+
+![ ](../assets/icon_balance.png)
 
 **What it measures:** The difference in "wasted votes" between parties. Another measure of partisan gerrymandering.
 
@@ -435,6 +443,8 @@ We recommend keeping this as `TRUE` unless you have a specific reason to optimiz
 
 ### Expected Dem Seats
 
+![ ](../assets/icon_champion.png)
+
 **What it measures:** How many seats each party is expected to win, accounting for the probability of victory in each district.
 
 **Why it matters:** Sometimes you want a specific partisan outcome - "create a 7-7 map" or "maximize Democratic seats." This metric lets you target that directly.
@@ -499,6 +509,8 @@ This models electoral volatility. Higher values = more certain outcomes:
 ---
 
 ### Competitiveness
+
+![ ](../assets/icon_race.png)
 
 **What it measures:** How many districts are competitive (close to 50-50).
 
@@ -571,6 +583,8 @@ In a 14-district state, you might see:
 ---
 
 ### Bunking (Anti & Pro)
+
+![ ](../assets/icon_incumbent.png)
 
 **What it measures:** Whether specific precincts are kept together (pro-bunking) or apart (anti-bunking).
 
@@ -793,6 +807,8 @@ This creates a "good enough" zone near the target, which helps optimization conv
 ---
 
 ## Optimization Settings
+
+![ ](../assets/icon_flame.png)
 
 ### Simulated Annealing
 
@@ -1053,12 +1069,14 @@ final_analysis = FALSE  # Skip final summary
 ### General Tuning Advice
 
 **Start simple, add complexity:**
+
 1. Compactness only
 2. Add county preservation
 3. Add partisan metrics
 4. Add seat targets or bunking
 
 **Iterate on weights:**
+
 - Run for 1000 steps with initial weights
 - Check which metrics are far from target
 - Increase weights for metrics that need more attention
@@ -1066,6 +1084,7 @@ final_analysis = FALSE  # Skip final summary
 
 **Watch acceptance rate:**
 In verbose mode, you'll see acceptance rate (% ACC column):
+
 - ~80-90% early on = good exploration, the algorithm is accepting many changes to span the map
 - ~20-40% mid-run = good optimization, the algorithm is getting choose-y 
 - <10% at end = final refining, the algorithm is only accepting outright improvements
@@ -1076,10 +1095,14 @@ Each of these stages are important. If Mosaic's acceptance rate falls extremely 
 Always use the same seed when tuning weights, so you can compare results fairly.
 
 **Increase steps for complex objectives:**
+
 - 1000 steps: Simple compactness
 - 3000 steps: Compactness + counties + 1-2 partisan metrics
 - 5000+ steps: Complex objectives with multiple metrics
 
+**Consider how partisan objectives conflict:**
+
+An algorithm laser-focused on `mean-median difference` will necessarily produce a different partisan breakdown than one focused on the efficiency-gap, or one focused on the number of Democratic seats. 
 
 ---
 

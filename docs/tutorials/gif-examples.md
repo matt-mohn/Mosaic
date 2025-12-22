@@ -1,5 +1,7 @@
 # Creating Animated GIFs with Mosaic
 
+![ ](../../assets/icon_movie.png)
+
 Mosaic can create animated GIFs showing how districts evolve during the optimization process. 
 These are not only fun to look at  - it can help you better visualize algorithm behavior, and understand how different parameters affect redistricting outcomes.
 

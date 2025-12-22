@@ -2,6 +2,35 @@
 # Mosaic Plot Function
 # ============================================
 
+# Minimal validation for graphics input
+validate_graphics_shp <- function(shp, csv_geoids = NULL) {
+  if (nrow(shp) == 0) stop("Shapefile contains 0 precincts")
+
+  # Normalize CTY if lowercase
+  if ("cty" %in% tolower(names(shp)) && !"CTY" %in% names(shp)) {
+    idx <- which(tolower(names(shp)) == "cty")
+    names(shp)[idx] <- "CTY"
+  }
+
+  # Check GEOID column exists
+  id_col <- if ("GEOID20" %in% names(shp)) "GEOID20" else if ("GEOID" %in% names(shp)) "GEOID" else NULL
+  if (is.null(id_col)) stop("Shapefile missing GEOID or GEOID20 column")
+
+  # Check CSV GEOID match if provided
+  if (!is.null(csv_geoids)) {
+    shp_geoids <- as.character(shp[[id_col]])
+    csv_geoids <- as.character(csv_geoids)
+    missing <- setdiff(csv_geoids, shp_geoids)
+    extra <- setdiff(shp_geoids, csv_geoids)
+    if (length(missing) > 0 || length(extra) > 0) {
+      stop(sprintf("GEOID mismatch: %d in CSV not in shapefile, %d in shapefile not in CSV",
+                   length(missing), length(extra)))
+    }
+  }
+
+  return(shp)
+}
+
 DISTRICT_COLORS <- c(
   "#b86e6e", "#6e6ec2", "#bbffad", "#ff6e6e", "#ffe86e",
   "#6eb7b7", "#e7ac80", "#aca3e5", "#6effff", "#ff79c2",
@@ -38,9 +67,11 @@ mosaic_plot <- function(shapefile_path, csv_path = NULL, metrics_path = NULL,
   }
   
   cat("Loading data...\n")
-  map_data <- read_sf(shapefile_path) |>
-    left_join(read_csv(csv_path, col_types = "cd", show_col_types = FALSE))
-  
+  csv_data <- read_csv(csv_path, col_types = "cd", show_col_types = FALSE)
+  map_data <- read_sf(shapefile_path)
+  map_data <- validate_graphics_shp(map_data, csv_data$GEOID)
+  map_data <- left_join(map_data, csv_data)
+
   num_districts <- max(map_data$assignment, na.rm = TRUE)
   
   # Build base map
@@ -343,8 +374,9 @@ mosaic_gif <- function(shapefile_path, assignments_csv = NULL, metrics_csv = NUL
   cat("Loading shapefile and assignments...\n")
   shp <- read_sf(shapefile_path)
   assignments_df <- read_csv(assignments_csv, col_types = cols(.default = "c"), show_col_types = FALSE)
-  
+
   geoid_col <- names(assignments_df)[1]
+  shp <- validate_graphics_shp(shp, assignments_df[[geoid_col]])
   iteration_cols <- grep("^iteration_", names(assignments_df), value = TRUE)
   
   num_iterations <- length(iteration_cols)

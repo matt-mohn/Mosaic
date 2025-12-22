@@ -52,9 +52,10 @@ mosaic_plot(
 ### Tutorials and Reference
 - **[Mosaic in Action: North Carolina Examples](docs/tutorials/nc-examples.md)** - Seven comprehensive examples demonstrating Mosaic's capabilities
 - **[Plot Guide](docs/tutorials/plotting_guide.md)**  - Guide and reference for `mosaic_plot()`, `mosaic_partisan_plot()`
-- **[GIF Guide](docs/tutorials/gif-examples.md)** - Guide and reference for `mosaic_gif()`.
+- **[GIF Guide](docs/tutorials/gif-examples.md)** - Guide and reference for `mosaic_gif()`
 - **[Scoring & Optimization](docs/scoring.md)**  - Explanation of `run_chain()` parameters, scoring metrics, and optimization strategies
 - **[How Mosaic Works](docs/tutorials/infoguide.md)** - Understanding the ReCom algorithm, spanning trees, and simulated annealing
+- **[Adding Your Own Shapefiles](docs/shapefiles.md)** - How to prepare shapefiles for Mosaic, including DRA import guide
 
 #### Planned Future Options
 - **[Future Extensions](docs/tutorials/extensions.md)** - Plans I'm working on, flaws I am aware of.

@@ -1,5 +1,7 @@
 # Creating Maps with Mosaic
 
+![ ](../../assets/icon_paintbrush.png)
+
 Mosaic includes powerful plotting functions to visualize your redistricting results. This guide covers `mosaic_plot()` for static maps and `mosaic_partisan_plot()` for partisan analysis graphs.
 
 ## Table of Contents

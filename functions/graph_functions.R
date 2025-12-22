@@ -42,6 +42,17 @@ load_or_build_graph <- function(shapefile_path) {
   }
 
   graph <- build_graph(shp)
+
+  # Check for disconnected graph
+  if (!is_connected(graph)) {
+    components <- components(graph)
+    largest <- which.max(components$csize)
+    disconnected_count <- sum(components$membership != largest)
+    stop(sprintf(
+      "Shapefile contains %d disconnected precincts (not touching any others). All precincts must form a single connected region. Check for islands, enclaves, or gaps in your shapefile.",
+      disconnected_count
+    ))
+  }
   
   cat("Saving to cache:", cache_file, "\n")
   saveRDS(list(shp = shp, graph = graph), cache_file)
