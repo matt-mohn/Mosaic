@@ -110,7 +110,7 @@ The `sf` package typically works out of the box. If you encounter issues, instal
 ## Next Steps
 
 **Tutorials:**
-- **[Mosaic in Action: North Carolina Examples](tutorials/nc-examples.md)** - Seven comprehensive examples covering:
+- **[Mosaic in Action: North Carolina Examples](tutorials/nc-examples.md)** - Seven comprehensive examples covering multiple Mosaic features.
 
 - **[Creating Animated GIFs](tutorials/gif-examples.md)** - Learn to create GIF animations showing how districts evolve during optimization
 
