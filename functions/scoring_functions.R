@@ -225,9 +225,11 @@ calculate_expected_dem_seats <- function(dem_share, config) {
 }
 
 calculate_efficiency_gap <- function(dem_share) {
+  if (length(dem_share) == 0) return(NA_real_)
+
   wasted_dem <- 0
   wasted_rep <- 0
-  
+
   for (share in dem_share) {
     if (share > 0.5) {
       # Democrats win
@@ -244,6 +246,8 @@ calculate_efficiency_gap <- function(dem_share) {
 }
 
 calculate_robust_efficiency_gap <- function(dem_share) {
+  if (length(dem_share) == 0) return(NA_real_)
+
   # Swing scenarios and weights (normal distribution, σ=3%)
   swings  <- c(-0.08, -0.06, -0.04, -0.02, 0, 0.02, 0.04, 0.06, 0.08)
   weights <- c(0.007, 0.037, 0.108, 0.218, 0.272, 0.218, 0.108, 0.037, 0.007)

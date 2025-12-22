@@ -15,8 +15,14 @@ random_spanning_tree <- function(graph, counties = NULL, county_bias = 1.0) {
   
   # Apply county penalty if counties provided
   if (!is.null(counties) && county_bias != 1.0) {
+    # Validate counties vector length matches graph
+    if (length(counties) != vcount(graph)) {
+      stop(sprintf("Counties vector length (%d) doesn't match graph vertices (%d)",
+                   length(counties), vcount(graph)))
+    }
+
     edge_list <- as_edgelist(graph, names = FALSE)
-    
+
     # For subgraphs, counties vector corresponds to subgraph vertices in order
     # edge_list uses 1-indexed positions in the subgraph
     edge_counties_from <- counties[edge_list[,1]]

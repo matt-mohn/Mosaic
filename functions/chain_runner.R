@@ -308,20 +308,24 @@ run_chain <- function(shapefile_path,
     if (inherits(bunking_lists, "bunking_lists_raw")) {
       processed <- list(anti_bunking = list(), pro_bunking = list())
       
+      # Detect ID column
+      id_col <- NULL
+      for (col in c("GEOID20", "GEOID", "PRECINCT", "PCT")) {
+        if (col %in% names(shp)) { id_col <- col; break }
+      }
+      if (is.null(id_col)) stop("Shapefile missing ID column (need GEOID20, GEOID, PRECINCT, or PCT)")
+      shp_ids <- as.character(shp[[id_col]])
+
       # Process anti-bunking
       for (i in seq_along(bunking_lists$anti_bunking_raw)) {
         vec <- bunking_lists$anti_bunking_raw[[i]]
         weight <- as.numeric(vec[1])
         exponent <- as.numeric(vec[2])
         geoids <- as.character(vec[3:length(vec)])
-        
+
         precinct_indices <- integer(length(geoids))
         for (j in seq_along(geoids)) {
-          idx <- if ("GEOID20" %in% names(shp)) {
-            which(as.character(shp$GEOID20) == geoids[j])
-          } else {
-            which(as.character(shp$GEOID) == geoids[j])
-          }
+          idx <- which(shp_ids == geoids[j])
           if (length(idx) == 0) stop(paste("GEOID not found:", geoids[j]))
           precinct_indices[j] <- idx[1]
         }
@@ -341,14 +345,10 @@ run_chain <- function(shapefile_path,
         weight <- as.numeric(vec[1])
         exponent <- as.numeric(vec[2])
         geoids <- as.character(vec[3:length(vec)])
-        
+
         precinct_indices <- integer(length(geoids))
         for (j in seq_along(geoids)) {
-          idx <- if ("GEOID20" %in% names(shp)) {
-            which(as.character(shp$GEOID20) == geoids[j])
-          } else {
-            which(as.character(shp$GEOID) == geoids[j])
-          }
+          idx <- which(shp_ids == geoids[j])
           if (length(idx) == 0) stop(paste("GEOID not found:", geoids[j]))
           precinct_indices[j] <- idx[1]
         }

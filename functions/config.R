@@ -23,6 +23,43 @@ create_scoring_config <- function(
     competitiveness_maximize = TRUE,
     bunking_lists = NULL
 ) {
+  # Validate election_win_prob_at_55
+  if (!is.na(election_win_prob_at_55) && (election_win_prob_at_55 <= 0 || election_win_prob_at_55 >= 1)) {
+    stop("election_win_prob_at_55 must be between 0 and 1 (exclusive)")
+  }
+
+  # Validate weights are non-negative
+  weights_to_check <- list(
+    weight_cut_edges = weight_cut_edges,
+    weight_county_splits = weight_county_splits,
+    weight_mean_median = weight_mean_median,
+    weight_efficiency_gap = weight_efficiency_gap,
+    weight_dem_seats = weight_dem_seats,
+    weight_competitiveness = weight_competitiveness
+  )
+  for (name in names(weights_to_check)) {
+    val <- weights_to_check[[name]]
+    if (!is.na(val) && val < 0) {
+      stop(sprintf("%s cannot be negative (got %.2f)", name, val))
+    }
+  }
+
+  # Validate exponents are positive
+  exponents_to_check <- list(
+    exponent_cut_edges = exponent_cut_edges,
+    exponent_county_splits = exponent_county_splits,
+    exponent_mean_median = exponent_mean_median,
+    exponent_efficiency_gap = exponent_efficiency_gap,
+    exponent_dem_seats = exponent_dem_seats,
+    exponent_competitiveness = exponent_competitiveness
+  )
+  for (name in names(exponents_to_check)) {
+    val <- exponents_to_check[[name]]
+    if (!is.na(val) && val <= 0) {
+      stop(sprintf("%s must be positive (got %.2f)", name, val))
+    }
+  }
+
   config <- list(
     weights = list(
       cut_edges = weight_cut_edges,

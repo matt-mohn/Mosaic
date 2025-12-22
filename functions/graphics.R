@@ -13,8 +13,11 @@ validate_graphics_shp <- function(shp, csv_geoids = NULL) {
   }
 
   # Check GEOID column exists
-  id_col <- if ("GEOID20" %in% names(shp)) "GEOID20" else if ("GEOID" %in% names(shp)) "GEOID" else NULL
-  if (is.null(id_col)) stop("Shapefile missing GEOID or GEOID20 column")
+  id_col <- NULL
+  for (col in c("GEOID20", "GEOID", "PRECINCT", "PCT")) {
+    if (col %in% names(shp)) { id_col <- col; break }
+  }
+  if (is.null(id_col)) stop("Shapefile missing ID column (need GEOID20, GEOID, PRECINCT, or PCT)")
 
   # Check CSV GEOID match if provided
   if (!is.null(csv_geoids)) {
@@ -69,8 +72,33 @@ mosaic_plot <- function(shapefile_path, csv_path = NULL, metrics_path = NULL,
   cat("Loading data...\n")
   csv_data <- read_csv(csv_path, col_types = "cd", show_col_types = FALSE)
   map_data <- read_sf(shapefile_path)
-  map_data <- validate_graphics_shp(map_data, csv_data$GEOID)
-  map_data <- left_join(map_data, csv_data)
+
+  # Detect ID column from CSV (first column)
+  csv_id_col <- names(csv_data)[1]
+  map_data <- validate_graphics_shp(map_data, csv_data[[csv_id_col]])
+
+  # Detect ID column from shapefile for join
+  shp_id_col <- NULL
+  for (col in c("GEOID20", "GEOID", "PRECINCT", "PCT")) {
+    if (col %in% names(map_data)) { shp_id_col <- col; break }
+  }
+  if (is.null(shp_id_col)) shp_id_col <- csv_id_col
+
+  # Ensure both are character for reliable join
+  csv_data[[csv_id_col]] <- as.character(csv_data[[csv_id_col]])
+  map_data[[shp_id_col]] <- as.character(map_data[[shp_id_col]])
+
+  # Join with explicit column mapping
+  map_data <- left_join(map_data, csv_data, by = setNames(csv_id_col, shp_id_col))
+
+  # Validate join succeeded
+  if (all(is.na(map_data$assignment))) {
+    stop("Join failed: no matching IDs between shapefile and CSV. Check that you're using the same shapefile that was used for run_chain().")
+  }
+  na_count <- sum(is.na(map_data$assignment))
+  if (na_count > 0) {
+    warning(sprintf("%d precincts have no assignment (IDs not found in CSV)", na_count))
+  }
 
   num_districts <- max(map_data$assignment, na.rm = TRUE)
   
@@ -118,8 +146,14 @@ mosaic_plot <- function(shapefile_path, csv_path = NULL, metrics_path = NULL,
       district_colors <- character(nrow(map_data))
       for (d in 1:num_districts) {
         share <- dem_shares[d]
-        color_idx <- max(which(PARTISAN_BREAKS <= share))
-        color <- PARTISAN_COLORS[color_idx]
+        # Bounds check for color index
+        if (is.na(share)) {
+          color <- "#CCCCCC"  # Gray for missing data
+        } else {
+          share <- pmax(0, pmin(1, share))  # Clamp to [0,1]
+          color_idx <- max(which(PARTISAN_BREAKS <= share))
+          color <- PARTISAN_COLORS[color_idx]
+        }
         district_colors[map_data$assignment == d] <- color
       }
       
@@ -378,14 +412,35 @@ mosaic_gif <- function(shapefile_path, assignments_csv = NULL, metrics_csv = NUL
   geoid_col <- names(assignments_df)[1]
   shp <- validate_graphics_shp(shp, assignments_df[[geoid_col]])
   iteration_cols <- grep("^iteration_", names(assignments_df), value = TRUE)
-  
+
   num_iterations <- length(iteration_cols)
-  
+
+  # Detect ID column from shapefile
+  shp_id_col <- NULL
+  for (col in c("GEOID20", "GEOID", "PRECINCT", "PCT")) {
+    if (col %in% names(shp)) { shp_id_col <- col; break }
+  }
+  if (is.null(shp_id_col)) shp_id_col <- geoid_col
+
+  # Ensure both are character for reliable join
+  assignments_df[[geoid_col]] <- as.character(assignments_df[[geoid_col]])
+  shp[[shp_id_col]] <- as.character(shp[[shp_id_col]])
+
   # Join assignments to shapefile by GEOID
   cat("Joining assignments to shapefile by GEOID...\n")
   shp <- shp |>
-    left_join(assignments_df, by = c("GEOID20" = geoid_col))
-  
+    left_join(assignments_df, by = setNames(geoid_col, shp_id_col))
+
+  # Validate join succeeded
+  first_iter <- iteration_cols[1]
+  if (all(is.na(shp[[first_iter]]))) {
+    stop("Join failed: no matching IDs between shapefile and CSV. Check that you're using the same shapefile that was used for run_chain().")
+  }
+  na_count <- sum(is.na(shp[[first_iter]]))
+  if (na_count > 0) {
+    warning(sprintf("%d precincts have no assignment (IDs not found in CSV)", na_count))
+  }
+
   # Convert iteration columns back to integer after join
   for (col in iteration_cols) {
     shp[[col]] <- as.integer(shp[[col]])
@@ -554,10 +609,11 @@ mosaic_gif <- function(shapefile_path, assignments_csv = NULL, metrics_csv = NUL
         if (is.na(dem_share)) {
           color <- "#CCCCCC"
         } else {
+          dem_share <- pmax(0, pmin(1, dem_share))  # Clamp to [0,1]
           color_idx <- max(which(PARTISAN_BREAKS <= dem_share))
           color <- PARTISAN_COLORS[color_idx]
         }
-        
+
         district_colors[current_assignment == d] <- color
       }
       
@@ -572,7 +628,7 @@ mosaic_gif <- function(shapefile_path, assignments_csv = NULL, metrics_csv = NUL
     
     # Add precinct outlines
     if (precinct_outline) {
-      p <- p + geom_sf(data = shp, fill = NA, color = alpha("white", 0.15), linewidth = 0.1)
+      p <- p + geom_sf(data = shp, fill = NA, color = alpha("white", 0.2), linewidth = 0.15)
     }
     
     # Add title
@@ -596,7 +652,7 @@ mosaic_gif <- function(shapefile_path, assignments_csv = NULL, metrics_csv = NUL
     
     # Add border outline
     if (!is.null(dissolved_border)) {
-      p <- p + geom_sf(data = dissolved_border, fill = NA, color = "black", linewidth = 1.5)
+      p <- p + geom_sf(data = dissolved_border, fill = NA, color = "black", linewidth = 2)
     }
     
     # Add bunking markers
