@@ -64,7 +64,7 @@ _Note - these tables are copied from what is printed to console for your visibli
 | 750 | 578 | 578 |
 | 1000 | 540 | 540 |
 
-The results of the annealing are encouraging: the program initialized with 792 cuts (which isn't bad itself) and then fell to 540 over the course of the run.
+The results of the annealing are encouraging: the program initialized with 838 cuts (which isn't bad itself) and then fell to 540 over the course of the run.
 
 The score perfectly matches the number of cuts because that's the only weight that we used.
 
