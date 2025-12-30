@@ -291,53 +291,53 @@ get_election_volatility_k <- function(config) {
   return(k)
 }
 
-calculate_county_splits_score <- function(assignment, counties, node_pops, ideal_pop) {
+calculate_county_splits_score <- function(assignment, counties, node_pops, ideal_pop, pdev_tolerance = 0.05) {
   if (is.null(counties)) {
     return(0)
   }
-  
+
   # Check for cached county lookup
   if (!exists("county_lookup", envir = .scoring_cache)) {
     # First time: build lookup table
     unique_counties <- unique(counties)
     county_lookup <- vector("list", length(unique_counties))
     names(county_lookup) <- unique_counties
-    
+
     for (county_name in unique_counties) {
       county_lookup[[county_name]] <- which(counties == county_name)
     }
-    
+
     # Cache it
     assign("county_lookup", county_lookup, envir = .scoring_cache)
     assign("county_pops", sapply(county_lookup, function(idx) sum(node_pops[idx])), envir = .scoring_cache)
     assign("county_allowances", ceiling(get("county_pops", envir = .scoring_cache) / ideal_pop), envir = .scoring_cache)
   }
-  
+
   # Use cached lookups
   county_lookup <- get("county_lookup", envir = .scoring_cache)
   county_pops <- get("county_pops", envir = .scoring_cache)
   allowances <- get("county_allowances", envir = .scoring_cache)
-  
+
   count_penalty <- 0
   smoothness_penalty <- 0
-  
+
   for (county_name in names(county_lookup)) {
     precinct_indices <- county_lookup[[county_name]]
     county_pop <- county_pops[county_name]
-    
+
     if (county_pop == 0) next
-    
+
     # Get districts in this county
     districts_in_county <- unique(assignment[precinct_indices])
     num_splits <- length(districts_in_county)
-    
+
     allowance <- allowances[county_name]
-    
-    # Part 1: Count penalty
+
+    # Count penalty: only penalize EXCESS splits beyond allowance
     excess_splits <- max(0, num_splits - allowance)
     count_penalty <- count_penalty + excess_splits
-    
-    # Part 2: Smoothness penalty - only for counties split beyond allowance
+
+    # Smoothness penalty - only for counties split beyond allowance
     if (num_splits > allowance) {
       # Calculate fraction of county in each district
       fractions <- numeric(num_splits)
@@ -347,24 +347,41 @@ calculate_county_splits_score <- function(assignment, counties, node_pops, ideal
         pop_in_district <- sum(node_pops[precinct_indices[district_mask]])
         fractions[j] <- pop_in_district / county_pop
       }
-      
+
       # Sort fractions to identify minority pieces
       fractions_sorted <- sort(fractions, decreasing = TRUE)
-      
+
       # Sum everything except the largest piece (minority pieces)
       minority_fraction <- sum(fractions_sorted[2:length(fractions_sorted)])
-      
+
       smoothness_penalty <- smoothness_penalty + minority_fraction
     }
   }
-  
-  # Combine: integer count + decimal smoothness
-  return(count_penalty + smoothness_penalty)
+
+  # Count "clean" districts (entirely within one county)
+  num_districts <- max(assignment)
+  clean_districts <- 0
+
+  for (d in 1:num_districts) {
+    district_nodes <- which(assignment == d)
+    counties_in_district <- unique(counties[district_nodes])
+    if (length(counties_in_district) == 1) {
+      clean_districts <- clean_districts + 1
+    }
+  }
+
+  # Max possible clean districts = total "district slots" that fit in counties
+  # Account for population deviation tolerance (districts can be undersized)
+  min_district_pop <- ideal_pop * (1 - pdev_tolerance)
+  max_clean <- sum(floor(county_pops / min_district_pop))
+
+  # Final score: excess splits + smoothness + (max_clean - actual_clean)
+  return(count_penalty + smoothness_penalty + (max_clean - clean_districts))
 }
 
 calculate_map_metrics <- function(graph, assignment, node_pops, config,
                                   shp = NULL, counties = NULL, ideal_pop = NULL,
-                                  timers = NULL, tracking = NULL) {
+                                  pdev_tolerance = 0.05, timers = NULL, tracking = NULL) {
   metrics <- list()
   
   # Determine tracking if not provided
@@ -379,7 +396,7 @@ calculate_map_metrics <- function(graph, assignment, node_pops, config,
   # County splits score - only if tracking active
   if (tracking$county && !is.null(counties) && !is.null(ideal_pop)) {
     t0 <- start_timer()
-    metrics$county_splits <- calculate_county_splits_score(assignment, counties, node_pops, ideal_pop)
+    metrics$county_splits <- calculate_county_splits_score(assignment, counties, node_pops, ideal_pop, pdev_tolerance)
     timers <- add_time(timers, "score_county_splits", t0)
   } else {
     metrics$county_splits <- NA

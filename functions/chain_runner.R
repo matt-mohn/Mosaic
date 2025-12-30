@@ -411,7 +411,8 @@ run_chain <- function(shapefile_path,
   
   t0 <- start_timer()
   timers <- if (timing_analysis) init_timing() else NULL
-  result <- calculate_map_metrics(graph, assignment, node_pops, config, shp, counties, ideal_pop, timers)
+  result <- calculate_map_metrics(graph, assignment, node_pops, config, shp, counties, ideal_pop,
+                                    pdev_tolerance = pdev_tolerance, timers = timers)
   current_metrics <- result$metrics
   timers <- result$timers
   timers <- add_time(timers, "score_calculation", t0)
@@ -470,7 +471,8 @@ run_chain <- function(shapefile_path,
     timers <- result$timers
     
     t0 <- start_timer()
-    result <- calculate_map_metrics(graph, proposed_assignment, node_pops, config, shp, counties, ideal_pop, timers)
+    result <- calculate_map_metrics(graph, proposed_assignment, node_pops, config, shp, counties, ideal_pop,
+                                      pdev_tolerance = pdev_tolerance, timers = timers)
     proposed_metrics <- result$metrics
     timers <- result$timers
     timers <- add_time(timers, "score_calculation", t0)
