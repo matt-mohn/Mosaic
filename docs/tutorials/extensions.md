@@ -1,6 +1,12 @@
 
 # Plans for further development
 
+### Recent updates
+
+- **Recombination of n > 2 districts** (Feb. 23, 2026) -- Use `recom_n = 3` or higher `n` in `run_chain()` to merge multiple districts at once. This enables cyclic trades that standard n=2 ReCom cannot reach, helping escape further local optima (inferior maps) during optimization.
+
+---
+
 ### Further partisan metrics
 
  - **Proportionality** -- this metric is used by some other sources; it aims to measure how well projected Dem/Rep seat shares mirror their statewide vote shares. I don't think this is difficult to implement whatsoever -- in the interim `EF GAP` and `DEM SEATS` targets are already strong proxies.
@@ -21,7 +27,6 @@ It is very difficult to rate/identify racial gerrymandering, all other objective
 
 ### Other technical plans
 
-- **Recombination of n > 2 districts** - Mosaic currently performs recombination on only 2 districts at a time. This constrains the solution space over time (for instance, two districts that form a long rectangle or dumbbell-sized combination will probably end up being split along their short axis back into shapes that resembling their original form, without much of a change). The solution to escape this problem will be to occasionally recombine **groups of 3/4 districts**. However, this is surprisingly difficult to do -- on many-district maps (like a 150n Texas State House) it takes considerable time to just identify neighboring triads compared with sampling from `cut_edges`. After finding a valid group, it also takes exponentially more time to re-cut within `pdev_tolerance`. 
 - **Smarter sampling** - choosing `cut_edges` for recombination based on non-random factors. Right now, we have `county_bias` that decreases the likelihood that county edges will be used in the minimum spanning tree (and hence cut). There are a number of other variables that could be introduced to this equation, such as edge length.
 -  **Additional municipality/COI protection** - currently, only **counties** have any kind of awareness built into Mosaic (through `weight_county_splits` and `county_bias`). Making Mosaic more modular will allow users to create more -- and overlapping -- regional distinctions, like city or municipality IDs that apply on top of counties. The pro-bunking list system can handle some of these needs on a small scale, but building it into the sampling system is much more powerful.
 - **Variable weights and conditions over time** - in the status quo, the weights you set in Mosaic are identical for the first initialization round and the last iteration you do (even 25,000 steps later). Making these more variable will enable specific phases of recombination (like a party-focused stage followed by a county-preservation stage) that mirror how human mapmakers approach redistricting. One key use case is for Mosaic to be able to explore the map with a higher `pdev_tolerance` than it ultimately anneals down to.

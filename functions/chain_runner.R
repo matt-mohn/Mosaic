@@ -186,12 +186,13 @@ create_bunking_lists <- function(anti_bunking = list(), pro_bunking = list()) {
 # MAIN CHAIN RUNNER
 # ============================================
 
-run_chain <- function(shapefile_path, 
-                      num_districts = 5, 
+run_chain <- function(shapefile_path,
+                      num_districts = 5,
                       num_steps = 1000,
                       pdev_tolerance = 0.05,
                       seed = NULL,
                       assignment = NULL,
+                      recom_n = 2,
                       use_optimization = TRUE,
                       initial_temp_factor = 0.2,
                       temp_mode = "PROPORTIONAL",
@@ -396,9 +397,22 @@ run_chain <- function(shapefile_path,
   validate_tracking(tracking, shp, counties, config)
   
   # ============================================
+  # RECOM-N INITIALIZATION (for n>2)
+  # ============================================
+
+  precinct_adj <- NULL
+  district_adj <- NULL
+
+  if (recom_n > 2) {
+    cat(sprintf("ReCom-N mode: n=%d (recombining %d districts at a time)\n", recom_n, recom_n))
+    precinct_adj <- as_adj_list(graph)
+    district_adj <- build_district_adjacency_list(precinct_adj, assignment, num_districts)
+  }
+
+  # ============================================
   # MAIN CHAIN EXECUTION
   # ============================================
-  
+
   n <- vcount(graph)
   assignments_all <- matrix(0, nrow = n, ncol = num_steps + 1)
   assignments_all[, 1] <- assignment
@@ -456,169 +470,281 @@ run_chain <- function(shapefile_path,
   
   print_header_interval <- 500  # Print header every 500 iterations
   
-  cat("\nRunning", num_steps, "ReCom steps...\n")
   start_time <- Sys.time()
-  
-  for (step in 1:num_steps) {
-    should_print <- (step %% print_interval == 0 || step == num_steps)
-    should_print_header <- (step %% print_header_interval == 0 || step == print_interval)
-    
-    result <- recom_step(graph, assignment, node_pops, ideal_pop, pdev_tolerance, 
-                         verbose = FALSE, timers = timers, counties = counties, 
-                         county_bias = county_bias)
-    
-    proposed_assignment <- result$assignment
-    timers <- result$timers
-    
-    t0 <- start_timer()
-    result <- calculate_map_metrics(graph, proposed_assignment, node_pops, config, shp, counties, ideal_pop,
-                                      pdev_tolerance = pdev_tolerance, timers = timers)
-    proposed_metrics <- result$metrics
-    timers <- result$timers
-    timers <- add_time(timers, "score_calculation", t0)
-    
-    proposed_score <- calculate_map_score(proposed_metrics, config)
-    
-    accept <- TRUE
-    if (use_optimization) {
-      accept <- accept_proposal(current_score, proposed_score, annealing_state)
-      
-      recent_accepts <- c(recent_accepts, as.integer(accept))
-      if (length(recent_accepts) > 50) {
-        recent_accepts <- recent_accepts[-1]
+
+  # ============================================
+  # MAIN LOOP - BRANCHED BY RECOM_N
+  # ============================================
+  # Two separate loop implementations to avoid per-iteration overhead for n=2
+
+  if (recom_n == 2) {
+    # ===========================================
+    # LEGACY N=2 LOOP (zero overhead)
+    # ===========================================
+    cat("\nRunning", num_steps, "ReCom steps...\n")
+
+    for (step in 1:num_steps) {
+      should_print <- (step %% print_interval == 0 || step == num_steps)
+      should_print_header <- (step %% print_header_interval == 0 || step == print_interval)
+
+      result <- recom_step(graph, assignment, node_pops, ideal_pop, pdev_tolerance,
+                           verbose = FALSE, timers = timers, counties = counties,
+                           county_bias = county_bias)
+      proposed_assignment <- result$assignment
+      timers <- result$timers
+
+      t0 <- start_timer()
+      result <- calculate_map_metrics(graph, proposed_assignment, node_pops, config, shp, counties, ideal_pop,
+                                        pdev_tolerance = pdev_tolerance, timers = timers)
+      proposed_metrics <- result$metrics
+      timers <- result$timers
+      timers <- add_time(timers, "score_calculation", t0)
+
+      proposed_score <- calculate_map_score(proposed_metrics, config)
+
+      accept <- TRUE
+      if (use_optimization) {
+        accept <- accept_proposal(current_score, proposed_score, annealing_state)
+
+        recent_accepts <- c(recent_accepts, as.integer(accept))
+        if (length(recent_accepts) > 50) {
+          recent_accepts <- recent_accepts[-1]
+        }
+
+        if (accept) {
+          annealing_state$accepts <- annealing_state$accepts + 1
+        } else {
+          annealing_state$rejects <- annealing_state$rejects + 1
+        }
+
+        annealing_state <- cool_temperature(annealing_state)
       }
-      
+
       if (accept) {
-        annealing_state$accepts <- annealing_state$accepts + 1
-      } else {
-        annealing_state$rejects <- annealing_state$rejects + 1
+        assignment <- proposed_assignment
+        current_score <- proposed_score
+        current_metrics <- proposed_metrics
       }
-      
-      annealing_state <- cool_temperature(annealing_state)
-    }
-    
-    if (accept) {
-      assignment <- proposed_assignment
-      current_score <- proposed_score
-      current_metrics <- proposed_metrics
-    }
-    
-    assignments_all[, step + 1] <- assignment
-    cut_edges_all[step + 1] <- current_metrics$cut_edges
-    scores_all[step + 1] <- current_score
-    county_splits_all[step + 1] <- if (!is.na(current_metrics$county_splits)) current_metrics$county_splits else NA
-    
-    if (tracking$partisan) {
-      mean_dem_share_all[step + 1] <- current_metrics$mean_dem_share
-      median_dem_share_all[step + 1] <- current_metrics$median_dem_share
-      competitiveness_all[step + 1] <- if (!is.na(current_metrics$competitiveness)) current_metrics$competitiveness else NA
-      dem_share_by_district[step + 1, ] <- current_metrics$dem_share
-    }
-    
-    if (should_print) {
-      if (!verbose_console) {
-        # Simple iteration counter
-        cat(sprintf("\rIter: %d/%d \n", step, num_steps))
-        
-      } else if (use_optimization) {
-        # Print header every print_header_interval iterations
-        if (should_print_header) {
-          cat("\n")
-          # Dynamic header based on EG mode
-          eg_header <- if (!is.null(current_metrics$is_robust_eg) && current_metrics$is_robust_eg) {
-            "EG ADJ"
-          } else {
-            "EF GAP"
+
+      assignments_all[, step + 1] <- assignment
+      cut_edges_all[step + 1] <- current_metrics$cut_edges
+      scores_all[step + 1] <- current_score
+      county_splits_all[step + 1] <- if (!is.na(current_metrics$county_splits)) current_metrics$county_splits else NA
+
+      if (tracking$partisan) {
+        mean_dem_share_all[step + 1] <- current_metrics$mean_dem_share
+        median_dem_share_all[step + 1] <- current_metrics$median_dem_share
+        competitiveness_all[step + 1] <- if (!is.na(current_metrics$competitiveness)) current_metrics$competitiveness else NA
+        dem_share_by_district[step + 1, ] <- current_metrics$dem_share
+      }
+
+      if (should_print) {
+        if (!verbose_console) {
+          cat(sprintf("\rIter: %d/%d \n", step, num_steps))
+
+        } else if (use_optimization) {
+          if (should_print_header) {
+            cat("\n")
+            eg_header <- if (!is.null(current_metrics$is_robust_eg) && current_metrics$is_robust_eg) {
+              "EG ADJ"
+            } else {
+              "EF GAP"
+            }
+            cat(sprintf("%-9s %-9s %-8s %-6s %-6s %-8s %-9s %-9s %-5s %-5s %-6s %-8s\n",
+                        "ITER", "SCORE", "TEMP", "CUTS", "CNTY", "BUNK", "MM DIFF", eg_header, "D", "R", "C", "% ACC"))
           }
-          cat(sprintf("%-9s %-9s %-8s %-6s %-6s %-8s %-9s %-9s %-5s %-5s %-6s %-8s\n",
-                      "ITER", "SCORE", "TEMP", "CUTS", "CNTY", "BUNK", "MM DIFF", eg_header, "D", "R", "C", "% ACC"))
-        }
-        
-        # Calculate metrics for display
-        n_recent <- sum(recent_accepts)
-        accept_pct <- 100 * n_recent / length(recent_accepts)
-        
-        mm_val <- current_metrics$mean_median_diff
-        if (!is.na(mm_val)) {
-          mm_pct <- 100 * mm_val
-          mm_str <- sprintf("%+.1f", mm_pct)
-        } else {
-          mm_str <- "--"
-        }
-        
-        eg_val <- current_metrics$efficiency_gap
-        if (!is.na(eg_val)) {
-          eg_pct <- 100 * eg_val
-          eg_str <- sprintf("%+.1f", eg_pct)
-        } else {
-          eg_str <- "--"
-        }
-        
-        dem_seats <- current_metrics$expected_dem_seats
-        rep_seats <- if (!is.na(dem_seats)) num_districts - dem_seats else NA
-        
-        # Competitiveness
-        comp_val <- current_metrics$competitiveness
-        if (!is.na(comp_val)) {
-          comp_str <- sprintf("%.1f", comp_val)
-        } else {
-          comp_str <- "--"
-        }
-        
-        # Calculate unweighted bunking score (sum of all raw metrics)
-        bunk_score <- 0
-        if (!is.null(config$bunking_lists)) {
-          bunking_lists <- config$bunking_lists
-          
-          # Sum anti-bunking raw metrics
-          if (!is.null(bunking_lists$anti_bunking) && length(bunking_lists$anti_bunking) > 0) {
-            for (i in seq_along(bunking_lists$anti_bunking)) {
-              prefix <- paste0("anti_bunking_", i)
-              raw_metric <- current_metrics[[paste0(prefix, "_raw")]]
-              if (!is.null(raw_metric)) {
-                bunk_score <- bunk_score + raw_metric
+
+          n_recent <- sum(recent_accepts)
+          accept_pct <- 100 * n_recent / length(recent_accepts)
+
+          mm_val <- current_metrics$mean_median_diff
+          mm_str <- if (!is.na(mm_val)) sprintf("%+.1f", 100 * mm_val) else "--"
+
+          eg_val <- current_metrics$efficiency_gap
+          eg_str <- if (!is.na(eg_val)) sprintf("%+.1f", 100 * eg_val) else "--"
+
+          dem_seats <- current_metrics$expected_dem_seats
+          rep_seats <- if (!is.na(dem_seats)) num_districts - dem_seats else NA
+
+          comp_val <- current_metrics$competitiveness
+          comp_str <- if (!is.na(comp_val)) sprintf("%.1f", comp_val) else "--"
+
+          bunk_score <- 0
+          if (!is.null(config$bunking_lists)) {
+            bunking_lists <- config$bunking_lists
+            if (!is.null(bunking_lists$anti_bunking) && length(bunking_lists$anti_bunking) > 0) {
+              for (i in seq_along(bunking_lists$anti_bunking)) {
+                raw_metric <- current_metrics[[paste0("anti_bunking_", i, "_raw")]]
+                if (!is.null(raw_metric)) bunk_score <- bunk_score + raw_metric
+              }
+            }
+            if (!is.null(bunking_lists$pro_bunking) && length(bunking_lists$pro_bunking) > 0) {
+              for (i in seq_along(bunking_lists$pro_bunking)) {
+                raw_metric <- current_metrics[[paste0("pro_bunking_", i, "_raw")]]
+                if (!is.null(raw_metric)) bunk_score <- bunk_score + raw_metric
               }
             }
           }
-          
-          # Sum pro-bunking raw metrics
-          if (!is.null(bunking_lists$pro_bunking) && length(bunking_lists$pro_bunking) > 0) {
-            for (i in seq_along(bunking_lists$pro_bunking)) {
-              prefix <- paste0("pro_bunking_", i)
-              raw_metric <- current_metrics[[paste0(prefix, "_raw")]]
-              if (!is.null(raw_metric)) {
-                bunk_score <- bunk_score + raw_metric
+          bunk_str <- if (bunk_score > 0) sprintf("%.2f", bunk_score) else "-"
+
+          cuts_str <- if(!is.na(current_metrics$cut_edges)) sprintf("%d", current_metrics$cut_edges) else "--"
+          cnty_str <- if(!is.na(current_metrics$county_splits)) sprintf("%.2f", current_metrics$county_splits) else "--"
+          d_str <- if(!is.na(dem_seats)) sprintf("%.1f", dem_seats) else "--"
+          r_str <- if(!is.na(rep_seats)) sprintf("%.1f", rep_seats) else "--"
+
+          cat(sprintf("%-9d %-9.0f %-8.1f %-6s %-6s %-8s %-9s %-9s %-5s %-5s %-6s %-8.1f\n",
+                      step, current_score, annealing_state$temperature,
+                      cuts_str, cnty_str, bunk_str, mm_str, eg_str, d_str, r_str, comp_str, accept_pct))
+        } else {
+          if (verbose_console) {
+            cat(sprintf("Step %d/%d (cuts:%d score:%.1f)\n",
+                        step, num_steps, current_metrics$cut_edges, current_score))
+          }
+        }
+      }
+
+      # Note: contiguity already verified inside recom_step()
+      # check_all_contiguous() removed from hot path for performance
+    }
+
+  } else {
+    # ===========================================
+    # RECOM-N LOOP (n>2)
+    # ===========================================
+    cat(sprintf("\nRunning %d ReCom-%d steps...\n", num_steps, recom_n))
+
+    for (step in 1:num_steps) {
+      should_print <- (step %% print_interval == 0 || step == num_steps)
+      should_print_header <- (step %% print_header_interval == 0 || step == print_interval)
+
+      result <- recom_step_n(graph, assignment, node_pops, ideal_pop, pdev_tolerance,
+                             district_adj, precinct_adj, n = recom_n,
+                             verbose = FALSE, timers = timers,
+                             counties = counties, county_bias = county_bias)
+      proposed_assignment <- result$assignment
+      changed_districts <- result$changed
+      timers <- result$timers
+
+      t0 <- start_timer()
+      result <- calculate_map_metrics(graph, proposed_assignment, node_pops, config, shp, counties, ideal_pop,
+                                        pdev_tolerance = pdev_tolerance, timers = timers)
+      proposed_metrics <- result$metrics
+      timers <- result$timers
+      timers <- add_time(timers, "score_calculation", t0)
+
+      proposed_score <- calculate_map_score(proposed_metrics, config)
+
+      accept <- TRUE
+      if (use_optimization) {
+        accept <- accept_proposal(current_score, proposed_score, annealing_state)
+
+        recent_accepts <- c(recent_accepts, as.integer(accept))
+        if (length(recent_accepts) > 50) {
+          recent_accepts <- recent_accepts[-1]
+        }
+
+        if (accept) {
+          annealing_state$accepts <- annealing_state$accepts + 1
+        } else {
+          annealing_state$rejects <- annealing_state$rejects + 1
+        }
+
+        annealing_state <- cool_temperature(annealing_state)
+      }
+
+      if (accept) {
+        assignment <- proposed_assignment
+        current_score <- proposed_score
+        current_metrics <- proposed_metrics
+
+        # Update district adjacency after accepted move
+        if (!is.null(changed_districts)) {
+          district_adj <- update_district_adjacency_list(district_adj, precinct_adj, assignment, changed_districts)
+        }
+      }
+
+      assignments_all[, step + 1] <- assignment
+      cut_edges_all[step + 1] <- current_metrics$cut_edges
+      scores_all[step + 1] <- current_score
+      county_splits_all[step + 1] <- if (!is.na(current_metrics$county_splits)) current_metrics$county_splits else NA
+
+      if (tracking$partisan) {
+        mean_dem_share_all[step + 1] <- current_metrics$mean_dem_share
+        median_dem_share_all[step + 1] <- current_metrics$median_dem_share
+        competitiveness_all[step + 1] <- if (!is.na(current_metrics$competitiveness)) current_metrics$competitiveness else NA
+        dem_share_by_district[step + 1, ] <- current_metrics$dem_share
+      }
+
+      if (should_print) {
+        if (!verbose_console) {
+          cat(sprintf("\rIter: %d/%d \n", step, num_steps))
+
+        } else if (use_optimization) {
+          if (should_print_header) {
+            cat("\n")
+            eg_header <- if (!is.null(current_metrics$is_robust_eg) && current_metrics$is_robust_eg) {
+              "EG ADJ"
+            } else {
+              "EF GAP"
+            }
+            cat(sprintf("%-9s %-9s %-8s %-6s %-6s %-8s %-9s %-9s %-5s %-5s %-6s %-8s\n",
+                        "ITER", "SCORE", "TEMP", "CUTS", "CNTY", "BUNK", "MM DIFF", eg_header, "D", "R", "C", "% ACC"))
+          }
+
+          n_recent <- sum(recent_accepts)
+          accept_pct <- 100 * n_recent / length(recent_accepts)
+
+          mm_val <- current_metrics$mean_median_diff
+          mm_str <- if (!is.na(mm_val)) sprintf("%+.1f", 100 * mm_val) else "--"
+
+          eg_val <- current_metrics$efficiency_gap
+          eg_str <- if (!is.na(eg_val)) sprintf("%+.1f", 100 * eg_val) else "--"
+
+          dem_seats <- current_metrics$expected_dem_seats
+          rep_seats <- if (!is.na(dem_seats)) num_districts - dem_seats else NA
+
+          comp_val <- current_metrics$competitiveness
+          comp_str <- if (!is.na(comp_val)) sprintf("%.1f", comp_val) else "--"
+
+          bunk_score <- 0
+          if (!is.null(config$bunking_lists)) {
+            bunking_lists <- config$bunking_lists
+            if (!is.null(bunking_lists$anti_bunking) && length(bunking_lists$anti_bunking) > 0) {
+              for (i in seq_along(bunking_lists$anti_bunking)) {
+                raw_metric <- current_metrics[[paste0("anti_bunking_", i, "_raw")]]
+                if (!is.null(raw_metric)) bunk_score <- bunk_score + raw_metric
+              }
+            }
+            if (!is.null(bunking_lists$pro_bunking) && length(bunking_lists$pro_bunking) > 0) {
+              for (i in seq_along(bunking_lists$pro_bunking)) {
+                raw_metric <- current_metrics[[paste0("pro_bunking_", i, "_raw")]]
+                if (!is.null(raw_metric)) bunk_score <- bunk_score + raw_metric
               }
             }
           }
-        }
-        
-        bunk_str <- if (bunk_score > 0) sprintf("%.2f", bunk_score) else "-"
-        
-        # Handle NA values in display
-        cuts_str <- if(!is.na(current_metrics$cut_edges)) sprintf("%d", current_metrics$cut_edges) else "--"
-        cnty_str <- if(!is.na(current_metrics$county_splits)) sprintf("%.2f", current_metrics$county_splits) else "--"
-        d_str <- if(!is.na(dem_seats)) sprintf("%.1f", dem_seats) else "--"
-        r_str <- if(!is.na(rep_seats)) sprintf("%.1f", rep_seats) else "--"
-        
-        cat(sprintf("%-9d %-9.0f %-8.1f %-6s %-6s %-8s %-9s %-9s %-5s %-5s %-6s %-8.1f\n",
-                    step, current_score, annealing_state$temperature, 
-                    cuts_str, cnty_str, 
-                    bunk_str, mm_str, eg_str, d_str, r_str, comp_str, accept_pct))
-      } else {
-        if (verbose_console) {
-          cat(sprintf("Step %d/%d (cuts:%d score:%.1f)\n", 
-                      step, num_steps, current_metrics$cut_edges, current_score))
+          bunk_str <- if (bunk_score > 0) sprintf("%.2f", bunk_score) else "-"
+
+          cuts_str <- if(!is.na(current_metrics$cut_edges)) sprintf("%d", current_metrics$cut_edges) else "--"
+          cnty_str <- if(!is.na(current_metrics$county_splits)) sprintf("%.2f", current_metrics$county_splits) else "--"
+          d_str <- if(!is.na(dem_seats)) sprintf("%.1f", dem_seats) else "--"
+          r_str <- if(!is.na(rep_seats)) sprintf("%.1f", rep_seats) else "--"
+
+          cat(sprintf("%-9d %-9.0f %-8.1f %-6s %-6s %-8s %-9s %-9s %-5s %-5s %-6s %-8.1f\n",
+                      step, current_score, annealing_state$temperature,
+                      cuts_str, cnty_str, bunk_str, mm_str, eg_str, d_str, r_str, comp_str, accept_pct))
+        } else {
+          if (verbose_console) {
+            cat(sprintf("Step %d/%d (cuts:%d score:%.1f)\n",
+                        step, num_steps, current_metrics$cut_edges, current_score))
+          }
         }
       }
-    }
-    
-    if (!check_all_contiguous(graph, assignment)) {
-      cat("\nERROR: Contiguity violated!\n")
-      stop("Contiguity violated!")
+
+      # Note: contiguity already verified inside recom_step_n()
+      # check_all_contiguous() removed from hot path for performance
     }
   }
-  
+
   if (!verbose_console) {
     cat("\n")  # Newline after progress counter
   }
@@ -671,11 +797,11 @@ run_chain <- function(shapefile_path,
   }
   cat("========================================\n\n")
   
-  list(assignments = assignments_all, final = assignment, time_per_step = time_per_step, 
+  list(assignments = assignments_all, final = assignment, time_per_step = time_per_step,
        cut_edges = cut_edges_all, scores = scores_all, county_splits = county_splits_all,
        mean_dem_share = mean_dem_share_all, median_dem_share = median_dem_share_all,
        competitiveness = competitiveness_all,
        dem_share_by_district = dem_share_by_district,
        annealing_state = annealing_state, final_metrics = current_metrics,
-       timestamp = timestamp, config = config)
+       timestamp = timestamp, config = config, recom_n = recom_n)
 }

@@ -1,6 +1,7 @@
-TIMING_ENABLED <- TRUE
+TIMING_ENABLED <- FALSE  # Set TRUE only when timing_analysis = TRUE in run_chain
 
 init_timing <- function() {
+  TIMING_ENABLED <<- TRUE  # Enable timing when init is called
   list(
     cut_edges = 0,
     merge_check = 0,

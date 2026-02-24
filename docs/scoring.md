@@ -32,14 +32,15 @@ Here's the full `run_chain()` function signature with all parameters:
 run_chain(
   # Required
   shapefile_path,
-  
+
   # Basic settings
   num_districts = 5,
   num_steps = 1000,
   pdev_tolerance = 0.05,
   seed = NULL,
   assignment = NULL,
-  
+  recom_n = 2,
+
   # Optimization control
   use_optimization = TRUE,
   initial_temp_factor = 0.2,
@@ -168,6 +169,48 @@ Random seed for reproducibility. Use the same seed to get the same results.
 seed = 123456  # Fixed seed - same results every time
 seed = NULL    # Random seed - different results each time
 ```
+
+---
+
+### `recom_n` (default: 2)
+Number of districts to merge and repartition at each ReCom step.
+
+```r
+recom_n = 2   # Standard ReCom (merge 2 adjacent districts)
+recom_n = n   # Merge n connected districts at a time (where n is an integer)
+```
+
+**What it does:**
+Standard ReCom (n=2) picks a random edge between two districts, merges them into one region, then repartitions back into two districts using a spanning tree cut. This enables bilateral swaps between neighboring districts.
+
+With n>2, the algorithm selects n connected districts (via random walk on the district adjacency graph), merges them, then sequentially carves off n-1 districts using bipartition, leaving the remainder as the nth district.
+
+Using n>2 opens up simultaneous cyclic trades (e.g. A→B, B→C, C→A) that n=2 cannot reach. It also creates more entropy overall, since certain combinations of n=2 districts may form barbell shapes that can only be split in a balanced fashion at one small narrow point.
+
+**Tradeoffs:**
+Higher `recom_n` values are slower per iteration (especially compared with n=2) because they require exponentially more partitions, population checks, and contiguity checks. Past `recom_n = 3`, the gains in performance, if they exist at all, wither rapidly- the jump from 2->3 enables most of the cyclical advantages.
+
+**Example:**
+```r
+# Standard n=2 (default, fastest)
+results <- run_chain(
+  shapefile_path = SHAPEFILE,
+  num_districts = 14,
+  num_steps = 3000
+)
+
+# n=3 for potentially better partisan optimization
+results <- run_chain(
+  shapefile_path = SHAPEFILE,
+  num_districts = 14,
+  num_steps = 2000,
+  recom_n = 3,
+  target_dem_seats = 7,
+  weight_dem_seats = 250
+)
+```
+
+If you have the time, consider using `recom_n = 3` - otherwise, a value of 2 will cover most use cases.
 
 ---
 
