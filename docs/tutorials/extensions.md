@@ -3,6 +3,7 @@
 
 ### Recent updates
 
+- **Polsby-Popper compactness scoring** (Feb. 24, 2026) -- Use `weight_polsby_popper` to optimize for geometric compactness based on the Polsby-Popper perimeter-to-area ratio: `PP = 4π × Area / Perimeter²`. Also added edge precomputation/cache to facilitate this.
 - **Recombination of n > 2 districts** (Feb. 23, 2026) -- Use `recom_n = 3` or higher `n` in `run_chain()` to merge multiple districts at once. This enables cyclic trades that standard n=2 ReCom cannot reach, helping escape further local optima (inferior maps) during optimization.
 
 ---
@@ -14,10 +15,9 @@
  - **Use of multiple elections** -- this is a key add once I have made Mosaic more modular; it should be feasible to optimize a map to be fair/stable across different electoral environments, especially in states undergoing significant shifts. This is high priority. One workaround is to supply the shapefile with `DEM` and `REP` values that are averages of different elections, but I acknowledge this is *not* the same.
 
 ### New geographic metrics
-In the status quo, Mosaic is basically blind -- it does not store or handle any geographic information, except for `cut edges`. While there are a number of advantages to `cut edges` -- it's geographically neutral, computationally lightweight and strongly associated with other measures of compactness -- there are still some obvious reasons to implement formal geographic measurements, like:
+In the status quo, Mosaic uses `cut edges` as a compactness proxy -- geographically neutral, computationally lightweight, and strongly associated with other compactness measures. With Polsby-Popper now implemented, remaining geographic metrics include:
 
-- **Polsby-Popper score** -- a measure of perimeter vs. area, penalizing districts with boundaries that wind a lot longer than their area would suggest. This is the lowest-hanging fruit since it can be implemented solely by including boundary lengths in the adjacency graph.
-- **Reock score** - this is a smarter measure than Polsby-Popper (comparing a district's area to its minimum bounding circle's area) but has higher computational overhead; I am unlikely to implement this anytime soon. This is also true for **convex hull** based metrics.
+- **Reock score** - compares a district's area to its minimum bounding circle's area. Higher computational overhead than Polsby-Popper; unlikely to be implemented soon. This is also true for **convex hull** based metrics.
 
 ### Demographic metrics
 

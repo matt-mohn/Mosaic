@@ -97,8 +97,12 @@ determine_active_tracking <- function(config) {
     county = FALSE,
     bunking = FALSE,
     partisan = FALSE,
-    victory = FALSE
+    victory = FALSE,
+    polsby_popper = FALSE
   )
+
+  # Polsby-Popper tracking: active if weight is not NA
+  tracking$polsby_popper <- !is.na(config$weights$polsby_popper)
   
   # County tracking: active if weight is not NA
   tracking$county <- !is.na(config$weights$county_splits)
@@ -197,10 +201,11 @@ print_tracking_status <- function(tracking) {
   cat("\n========================================\n")
   cat("TRACKING MODULES\n")
   cat("========================================\n")
-  cat(sprintf("County:     %s\n", if(tracking$county) "ON" else "OFF"))
-  cat(sprintf("Bunking:    %s\n", if(tracking$bunking) "ON" else "OFF"))
-  cat(sprintf("Partisan:   %s\n", if(tracking$partisan) "ON" else "OFF"))
-  cat(sprintf("Victory:    %s\n", if(tracking$victory) "ON" else "OFF"))
+  cat(sprintf("County:        %s\n", if(tracking$county) "ON" else "OFF"))
+  cat(sprintf("Bunking:       %s\n", if(tracking$bunking) "ON" else "OFF"))
+  cat(sprintf("Partisan:      %s\n", if(tracking$partisan) "ON" else "OFF"))
+  cat(sprintf("Victory:       %s\n", if(tracking$victory) "ON" else "OFF"))
+  cat(sprintf("Polsby-Popper: %s\n", if(tracking$polsby_popper) "ON" else "OFF"))
   cat("========================================\n\n")
 }
 
@@ -212,6 +217,59 @@ print_tracking_status <- function(tracking) {
 
 clear_scoring_cache <- function() {
   rm(list = ls(envir = .scoring_cache), envir = .scoring_cache)
+}
+
+# ============================================
+# POLSBY-POPPER CALCULATION
+# ============================================
+
+calculate_polsby_popper <- function(assignment, pp_data, num_districts) {
+  # Fast vectorized Polsby-Popper calculation using precomputed edge data
+  # Returns mean PP across all districts (higher = more compact)
+
+  if (is.null(pp_data)) {
+    return(NA_real_)
+  }
+
+  edge_from <- pp_data$edge_from
+  edge_to <- pp_data$edge_to
+  edge_len <- pp_data$edge_len
+  areas <- pp_data$areas
+  exterior_perimeters <- pp_data$exterior_perimeters
+
+  # Initialize district totals
+  district_area <- numeric(num_districts)
+  district_perimeter <- numeric(num_districts)
+
+  # Sum areas and exterior perimeters by district
+  for (d in 1:num_districts) {
+    mask <- assignment == d
+    district_area[d] <- sum(areas[mask])
+    district_perimeter[d] <- sum(exterior_perimeters[mask])
+  }
+
+  # Add cut edge contributions (edges where endpoints are in different districts)
+  d1 <- assignment[edge_from]
+  d2 <- assignment[edge_to]
+  is_cut <- d1 != d2
+
+  if (any(is_cut)) {
+    cut_len <- edge_len[is_cut]
+    cut_d1 <- d1[is_cut]
+    cut_d2 <- d2[is_cut]
+
+    for (d in 1:num_districts) {
+      district_perimeter[d] <- district_perimeter[d] +
+        sum(cut_len[cut_d1 == d]) +
+        sum(cut_len[cut_d2 == d])
+    }
+  }
+
+  # Calculate PP for each district
+  pp <- 4 * pi * district_area / (district_perimeter^2)
+
+  # Return mean PP
+  mean(pp)
 }
 
 # ============================================
@@ -381,18 +439,35 @@ calculate_county_splits_score <- function(assignment, counties, node_pops, ideal
 
 calculate_map_metrics <- function(graph, assignment, node_pops, config,
                                   shp = NULL, counties = NULL, ideal_pop = NULL,
-                                  pdev_tolerance = 0.05, timers = NULL, tracking = NULL) {
+                                  pdev_tolerance = 0.05, timers = NULL, tracking = NULL,
+                                  pp_data = NULL) {
   metrics <- list()
-  
+  num_districts <- max(assignment)
+
   # Determine tracking if not provided
   if (is.null(tracking)) {
     tracking <- determine_active_tracking(config)
   }
-  
+
   t0 <- start_timer()
   metrics$cut_edges <- nrow(get_cut_edges(graph, assignment))
   timers <- add_time(timers, "score_cut_edges", t0)
-  
+
+  # Polsby-Popper - only if tracking active
+  if (tracking$polsby_popper && !is.null(pp_data)) {
+    t0 <- start_timer()
+    mean_pp <- calculate_polsby_popper(assignment, pp_data, num_districts)
+    metrics$polsby_popper <- mean_pp
+    # Transform: (1 - PP)^exponent * 100 so lower = better
+    exponent <- config$exponents$polsby_popper
+    if (is.null(exponent) || is.na(exponent)) exponent <- 1
+    metrics$polsby_popper_metric <- ((1 - mean_pp) ^ exponent) * 100
+    timers <- add_time(timers, "score_polsby_popper", t0)
+  } else {
+    metrics$polsby_popper <- NA
+    metrics$polsby_popper_metric <- NA
+  }
+
   # County splits score - only if tracking active
   if (tracking$county && !is.null(counties) && !is.null(ideal_pop)) {
     t0 <- start_timer()

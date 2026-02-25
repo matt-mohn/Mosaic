@@ -9,12 +9,14 @@ create_scoring_config <- function(
     weight_efficiency_gap = NA,
     weight_dem_seats = NA,
     weight_competitiveness = NA,
+    weight_polsby_popper = NA,
     exponent_cut_edges = 1,
     exponent_county_splits = 1,
     exponent_mean_median = 2,
     exponent_efficiency_gap = 2,
     exponent_dem_seats = 2,
     exponent_competitiveness = 1,
+    exponent_polsby_popper = 1,
     target_mean_median = 0,
     target_efficiency_gap = 0,
     target_dem_seats = NA,
@@ -35,7 +37,8 @@ create_scoring_config <- function(
     weight_mean_median = weight_mean_median,
     weight_efficiency_gap = weight_efficiency_gap,
     weight_dem_seats = weight_dem_seats,
-    weight_competitiveness = weight_competitiveness
+    weight_competitiveness = weight_competitiveness,
+    weight_polsby_popper = weight_polsby_popper
   )
   for (name in names(weights_to_check)) {
     val <- weights_to_check[[name]]
@@ -51,7 +54,8 @@ create_scoring_config <- function(
     exponent_mean_median = exponent_mean_median,
     exponent_efficiency_gap = exponent_efficiency_gap,
     exponent_dem_seats = exponent_dem_seats,
-    exponent_competitiveness = exponent_competitiveness
+    exponent_competitiveness = exponent_competitiveness,
+    exponent_polsby_popper = exponent_polsby_popper
   )
   for (name in names(exponents_to_check)) {
     val <- exponents_to_check[[name]]
@@ -67,7 +71,8 @@ create_scoring_config <- function(
       mean_median = weight_mean_median,
       efficiency_gap = weight_efficiency_gap,
       dem_seats = weight_dem_seats,
-      competitiveness = weight_competitiveness
+      competitiveness = weight_competitiveness,
+      polsby_popper = weight_polsby_popper
     ),
     exponents = list(
       cut_edges = exponent_cut_edges,
@@ -75,7 +80,8 @@ create_scoring_config <- function(
       mean_median = exponent_mean_median,
       efficiency_gap = exponent_efficiency_gap,
       dem_seats = exponent_dem_seats,
-      competitiveness = exponent_competitiveness
+      competitiveness = exponent_competitiveness,
+      polsby_popper = exponent_polsby_popper
     ),
     targets = list(
       mean_median = target_mean_median,
@@ -117,7 +123,10 @@ get_weights_from_config <- function(config) {
   if (!is.na(config$weights$competitiveness)) {
     weights$competitiveness <- config$weights$competitiveness
   }
-  
+  if (!is.na(config$weights$polsby_popper)) {
+    weights$polsby_popper <- config$weights$polsby_popper
+  }
+
   # Default weights if none specified
   if (length(weights) == 0) {
     weights$cut_edges <- 1.0

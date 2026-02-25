@@ -206,12 +206,14 @@ run_chain <- function(shapefile_path,
                       weight_efficiency_gap = NA,
                       weight_dem_seats = NA,
                       weight_competitiveness = NA,
+                      weight_polsby_popper = NA,
                       exponent_cut_edges = 1,
                       exponent_county_splits = 1,
                       exponent_mean_median = 2,
                       exponent_efficiency_gap = 2,
                       exponent_dem_seats = 2,
                       exponent_competitiveness = 1,
+                      exponent_polsby_popper = 1,
                       target_mean_median = 0,
                       target_efficiency_gap = 0,
                       target_dem_seats = NA,
@@ -250,11 +252,15 @@ run_chain <- function(shapefile_path,
     set.seed(seed)
   }
   
+  # Determine if Polsby-Popper precomputation is needed
+  use_polsby_popper <- !is.na(weight_polsby_popper)
+
   # Load and prepare shapefile data
   cat("Loading shapefile:", shapefile_path, "\n")
-  data <- load_or_build_graph(shapefile_path)
+  data <- load_or_build_graph(shapefile_path, precompute_polsby_popper = use_polsby_popper)
   shp <- data$shp
   graph <- data$graph
+  pp_data <- data$pp_data
   cat("Loaded", nrow(shp), "precincts\n")
 
   # Normalize column names (handle lowercase variants like 'pop' -> 'POP')
@@ -375,12 +381,14 @@ run_chain <- function(shapefile_path,
     weight_efficiency_gap = weight_efficiency_gap,
     weight_dem_seats = weight_dem_seats,
     weight_competitiveness = weight_competitiveness,
+    weight_polsby_popper = weight_polsby_popper,
     exponent_cut_edges = exponent_cut_edges,
     exponent_county_splits = exponent_county_splits,
     exponent_mean_median = exponent_mean_median,
     exponent_efficiency_gap = exponent_efficiency_gap,
     exponent_dem_seats = exponent_dem_seats,
     exponent_competitiveness = exponent_competitiveness,
+    exponent_polsby_popper = exponent_polsby_popper,
     target_mean_median = target_mean_median,
     target_efficiency_gap = target_efficiency_gap,
     target_dem_seats = target_dem_seats,
@@ -426,7 +434,8 @@ run_chain <- function(shapefile_path,
   t0 <- start_timer()
   timers <- if (timing_analysis) init_timing() else NULL
   result <- calculate_map_metrics(graph, assignment, node_pops, config, shp, counties, ideal_pop,
-                                    pdev_tolerance = pdev_tolerance, timers = timers)
+                                    pdev_tolerance = pdev_tolerance, timers = timers,
+                                    pp_data = pp_data)
   current_metrics <- result$metrics
   timers <- result$timers
   timers <- add_time(timers, "score_calculation", t0)
@@ -495,7 +504,8 @@ run_chain <- function(shapefile_path,
 
       t0 <- start_timer()
       result <- calculate_map_metrics(graph, proposed_assignment, node_pops, config, shp, counties, ideal_pop,
-                                        pdev_tolerance = pdev_tolerance, timers = timers)
+                                        pdev_tolerance = pdev_tolerance, timers = timers,
+                                        pp_data = pp_data)
       proposed_metrics <- result$metrics
       timers <- result$timers
       timers <- add_time(timers, "score_calculation", t0)
@@ -550,8 +560,8 @@ run_chain <- function(shapefile_path,
             } else {
               "EF GAP"
             }
-            cat(sprintf("%-9s %-9s %-8s %-6s %-6s %-8s %-9s %-9s %-5s %-5s %-6s %-8s\n",
-                        "ITER", "SCORE", "TEMP", "CUTS", "CNTY", "BUNK", "MM DIFF", eg_header, "D", "R", "C", "% ACC"))
+            cat(sprintf("%-9s %-9s %-8s %-6s %-5s %-6s %-8s %-9s %-9s %-5s %-5s %-6s %-8s\n",
+                        "ITER", "SCORE", "TEMP", "CUTS", "PP", "CNTY", "BUNK", "MM DIFF", eg_header, "D", "R", "C", "% ACC"))
           }
 
           n_recent <- sum(recent_accepts)
@@ -588,13 +598,14 @@ run_chain <- function(shapefile_path,
           bunk_str <- if (bunk_score > 0) sprintf("%.2f", bunk_score) else "-"
 
           cuts_str <- if(!is.na(current_metrics$cut_edges)) sprintf("%d", current_metrics$cut_edges) else "--"
+          pp_str <- if(!is.na(current_metrics$polsby_popper)) sprintf(".%02d", round(current_metrics$polsby_popper * 100)) else "--"
           cnty_str <- if(!is.na(current_metrics$county_splits)) sprintf("%.2f", current_metrics$county_splits) else "--"
           d_str <- if(!is.na(dem_seats)) sprintf("%.1f", dem_seats) else "--"
           r_str <- if(!is.na(rep_seats)) sprintf("%.1f", rep_seats) else "--"
 
-          cat(sprintf("%-9d %-9.0f %-8.1f %-6s %-6s %-8s %-9s %-9s %-5s %-5s %-6s %-8.1f\n",
+          cat(sprintf("%-9d %-9.0f %-8.1f %-6s %-5s %-6s %-8s %-9s %-9s %-5s %-5s %-6s %-8.1f\n",
                       step, current_score, annealing_state$temperature,
-                      cuts_str, cnty_str, bunk_str, mm_str, eg_str, d_str, r_str, comp_str, accept_pct))
+                      cuts_str, pp_str, cnty_str, bunk_str, mm_str, eg_str, d_str, r_str, comp_str, accept_pct))
         } else {
           if (verbose_console) {
             cat(sprintf("Step %d/%d (cuts:%d score:%.1f)\n",
@@ -627,7 +638,8 @@ run_chain <- function(shapefile_path,
 
       t0 <- start_timer()
       result <- calculate_map_metrics(graph, proposed_assignment, node_pops, config, shp, counties, ideal_pop,
-                                        pdev_tolerance = pdev_tolerance, timers = timers)
+                                        pdev_tolerance = pdev_tolerance, timers = timers,
+                                        pp_data = pp_data)
       proposed_metrics <- result$metrics
       timers <- result$timers
       timers <- add_time(timers, "score_calculation", t0)
@@ -687,8 +699,8 @@ run_chain <- function(shapefile_path,
             } else {
               "EF GAP"
             }
-            cat(sprintf("%-9s %-9s %-8s %-6s %-6s %-8s %-9s %-9s %-5s %-5s %-6s %-8s\n",
-                        "ITER", "SCORE", "TEMP", "CUTS", "CNTY", "BUNK", "MM DIFF", eg_header, "D", "R", "C", "% ACC"))
+            cat(sprintf("%-9s %-9s %-8s %-6s %-5s %-6s %-8s %-9s %-9s %-5s %-5s %-6s %-8s\n",
+                        "ITER", "SCORE", "TEMP", "CUTS", "PP", "CNTY", "BUNK", "MM DIFF", eg_header, "D", "R", "C", "% ACC"))
           }
 
           n_recent <- sum(recent_accepts)
@@ -725,13 +737,14 @@ run_chain <- function(shapefile_path,
           bunk_str <- if (bunk_score > 0) sprintf("%.2f", bunk_score) else "-"
 
           cuts_str <- if(!is.na(current_metrics$cut_edges)) sprintf("%d", current_metrics$cut_edges) else "--"
+          pp_str <- if(!is.na(current_metrics$polsby_popper)) sprintf(".%02d", round(current_metrics$polsby_popper * 100)) else "--"
           cnty_str <- if(!is.na(current_metrics$county_splits)) sprintf("%.2f", current_metrics$county_splits) else "--"
           d_str <- if(!is.na(dem_seats)) sprintf("%.1f", dem_seats) else "--"
           r_str <- if(!is.na(rep_seats)) sprintf("%.1f", rep_seats) else "--"
 
-          cat(sprintf("%-9d %-9.0f %-8.1f %-6s %-6s %-8s %-9s %-9s %-5s %-5s %-6s %-8.1f\n",
+          cat(sprintf("%-9d %-9.0f %-8.1f %-6s %-5s %-6s %-8s %-9s %-9s %-5s %-5s %-6s %-8.1f\n",
                       step, current_score, annealing_state$temperature,
-                      cuts_str, cnty_str, bunk_str, mm_str, eg_str, d_str, r_str, comp_str, accept_pct))
+                      cuts_str, pp_str, cnty_str, bunk_str, mm_str, eg_str, d_str, r_str, comp_str, accept_pct))
         } else {
           if (verbose_console) {
             cat(sprintf("Step %d/%d (cuts:%d score:%.1f)\n",

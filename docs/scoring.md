@@ -11,6 +11,7 @@ This guide covers everything you need to know about `run_chain()` parameters, sc
 2. [Basic Parameters](#basic-parameters)
 3. [Scoring Metrics](#scoring-metrics)
    - [Cut Edges](#cut-edges)
+   - [Polsby-Popper](#polsby-popper)
    - [County Splits](#county-splits)
    - [Mean-Median Difference](#mean-median-difference)
    - [Efficiency Gap](#efficiency-gap)
@@ -52,14 +53,16 @@ run_chain(
   
   # Scoring weights
   weight_cut_edges = 1,
+  weight_polsby_popper = NA,
   weight_county_splits = NA,
   weight_mean_median = NA,
   weight_efficiency_gap = NA,
   weight_dem_seats = NA,
   weight_competitiveness = NA,
-  
+
   # Scoring exponents
   exponent_cut_edges = 1,
+  exponent_polsby_popper = 1,
   exponent_county_splits = 1,
   exponent_mean_median = 2,
   exponent_efficiency_gap = 2,
@@ -249,6 +252,69 @@ results <- run_chain(
 ```
 
 With `weight_cut_edges = 1` and `exponent_cut_edges = 1`, a map with 540 cut edges contributes 540 to the total score.
+
+---
+
+### Polsby-Popper
+
+**What it measures:** Geometric compactness using a perimeter-to-area ratio.
+
+**Why it matters:** Polsby-Popper is a widely-used compactness standard in redistricting law and academic literature. Unlike cut edges (which measures graph connectivity), PP directly measures the shape of district boundaries.
+
+**Parameters:**
+```r
+weight_polsby_popper = 100      # Weight (default: NA = disabled)
+exponent_polsby_popper = 1      # Exponent (default: 1)
+```
+
+**How it's calculated:**
+
+For each district, compute:
+```
+PP = 4π × Area / Perimeter²
+```
+
+This yields a value between 0 and 1, where 1 is a perfect circle. Real districts typically fall in the 0.2-0.5 range.
+
+Mosaic takes the mean PP across all districts, then transforms it into a minimization metric:
+```
+pp_metric = (1 - mean_pp)^exponent * 100
+```
+
+The `× 100` scaling puts PP scores in a similar range to cut edges for easier weight tuning.
+
+**Implementation note:**
+Computing perimeters geometrically each iteration would be slow. Instead, Mosaic precomputes shared boundary lengths between all adjacent precincts and stores them in the cache. At runtime, a district's perimeter is the sum of its exterior precinct boundaries plus the lengths of cut edges. This adds ~10% overhead compared to cut-edges-only runs.
+
+The precomputation happens automatically the first time you use `weight_polsby_popper` and is cached for future runs. This can take *considerable* time, even if you are using a generalized shapefile. The North Carolina shapefile provided with Mosaic's repo does not come with this data by default.
+
+Note: if you are using a generalized shapefile, the PP score you see in Mosaic is equivalent to an estimate and will not perfectly match a PP score calculated on the full-scale, ungeneralized shapefile. However, optimizing for it will produce improvements in the true figure.
+
+**Weighted score contribution:**
+```
+score_contribution = weight_polsby_popper * ((1 - mean_pp) ^ exponent) * 100
+```
+
+**Example:**
+```r
+# Optimize for geometric compactness
+results <- run_chain(
+  shapefile_path = SHAPEFILE,
+  num_districts = 14,
+  weight_polsby_popper = 100
+)
+
+# Combine PP with cut edges
+results <- run_chain(
+  shapefile_path = SHAPEFILE,
+  num_districts = 14,
+  weight_cut_edges = 1,
+  weight_polsby_popper = 50
+)
+```
+
+**Weight guidance:**
+PP typically needs higher weights than cut edges to be effective- a map will have hundreds of cut edges but its average Polsby-Popper score won't exceed 100 under any circumstances. I recommend starting using 50-100 and adjusting.
 
 ---
 
@@ -752,6 +818,7 @@ Your map's total score is the weighted sum of all enabled metrics:
 
 ```
 total_score = weight_cut_edges * (cut_edges ^ exp_cut_edges)
+            + weight_polsby_popper * ((1 - mean_pp) ^ exp_pp) * 100
             + weight_county_splits * (county_splits ^ exp_county_splits)
             + weight_mean_median * (|mm - target_mm| ^ exp_mm) * 100
             + weight_efficiency_gap * (|eg - target_eg| ^ exp_eg) * 100
@@ -809,6 +876,7 @@ Weights control how much each metric matters relative to others. Here's how to t
 
 **Typical weight ranges:**
 - Cut edges: 1 (baseline)
+- Polsby-Popper: 50-100
 - County splits: 5-15
 - Mean-median: 50-500
 - Efficiency gap: 50-200
