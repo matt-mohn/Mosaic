@@ -334,30 +334,24 @@ county_bias = 10                # Sampling bias toward county boundaries
 ```
 
 **How it's calculated:**
-This is more sophisticated than just counting splits. The algorithm:
+The score combines three components:
 
-1. **Calculates allowance** - Each county gets an "allowance" based on how many districts it should reasonably span:
+1. **Excess splits** - Each county gets an "allowance" based on population:
    ```
    allowance = ceiling(county_population / ideal_district_population)
    ```
-   
-2. **Counts excess splits** - If a county is split into more districts than its allowance, the excess counts toward the score:
-   ```
-   excess_splits = max(0, actual_districts - allowance)
-   ```
+   If a county is split into more districts than its allowance, the excess counts as penalty. Mecklenburg County (1.1M people, 750K ideal) gets allowance=2, so splitting it 2 ways incurs no penalty; 3 ways adds 1.
 
-3. **Adds smoothness penalty** - For counties split beyond their allowance, we penalize fragmentation. If a county is split 60%-30%-10%, the 30% and 10% pieces contribute to a smoothness penalty.
+2. **Smoothness penalty** - For counties split beyond their allowance, we sum the population fractions of all pieces except the largest. A county split 90%-5%-5% adds 0.10; a county split 50%-50% adds 0.50. This penalizes fragmentation.
 
-4. **Combines them:**
-   ```
-   county_splits_score = excess_splits + smoothness_penalty
-   ```
+3. **Clean district penalty** - Counts how many districts are entirely contained within a single county ("clean" districts), compared to the theoretical maximum. The theoretical max is calculated per-county as `floor(county_pop / min_district_pop)` and summed. If fewer districts are clean than theoretically possible, the difference is added to the score.
 
-This means:
+**Final formula:**
+```
+county_splits_score = excess_splits + smoothness_penalty + (max_clean - actual_clean)
+```
 
-- Charlotte (Mecklenburg County, NC) with 1M people in a 750K district state can span 2 districts without penalty
-- Wake County, NC (pop 1.1m) split 3 ways when it should span 2 districts gets a penalty of 1
-- A county split 90%-5%-5% still gets a higher penalty than one split 50%-50%, because we prioritize lowering the total number of splits faster than the degree of splitting.
+In practice, excess splits dominates the score. Smoothness and clean district penalties provide tie-breaking pressure toward cleaner boundaries.
 
 **Weighted score contribution:**
 ```
